@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <meta name="description" content="Gestão financeira pessoal, privada e mobile-first.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="managers.css">
+  <title>Meu Financeiro</title>
+</head>
+<body>
+  <a class="skip-link" href="#content">Ir para o conteúdo</a>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <span class="eyebrow">MEU FINANCEIRO</span>
+        <h1 id="pageTitle">Visão geral</h1>
+      </div>
+      <div class="top-actions">
+        <button class="icon-button" id="privacyToggle" aria-label="Ocultar valores" title="Ocultar valores">◉</button>
+        <button class="icon-button" id="themeToggle" aria-label="Alternar tema" title="Alternar tema">☾</button>
+      </div>
+    </header>
+
+    <main id="content">
+      <section class="view active" data-view="home">
+        <div class="month-switcher" aria-label="Mês exibido">
+          <button class="icon-button" data-month="-1" aria-label="Mês anterior">‹</button>
+          <button class="month-label" id="monthLabel" data-month="today"></button>
+          <button class="icon-button" data-month="1" aria-label="Próximo mês">›</button>
+        </div>
+
+        <article class="hero-card">
+          <div class="hero-copy">
+            <span class="overline">Disponível de verdade</span>
+            <strong class="money money-xl" id="safeToSpend">R$ 0,00</strong>
+            <p id="safeHint">Depois de reservar as contas até a próxima renda.</p>
+          </div>
+          <div class="health-ring" id="healthRing" aria-label="Saúde financeira"><span id="healthScore">0</span><small>/100</small></div>
+        </article>
+
+        <div class="insight-card" id="primaryInsight">
+          <span class="insight-icon">✦</span>
+          <div><strong id="insightTitle">Comece pelo seu saldo</strong><p id="insightText">Cadastre seu saldo atual para receber orientações melhores.</p></div>
+        </div>
+
+        <div class="section-heading"><div><span class="overline">SEU MÊS</span><h2>Raio-x financeiro</h2></div></div>
+        <div class="metric-grid">
+          <article class="metric"><span>Saldo atual</span><strong class="money" id="cashNow">R$ 0,00</strong></article>
+          <article class="metric"><span>Resultado previsto</span><strong class="money" id="monthResult">R$ 0,00</strong></article>
+          <article class="metric"><span>A receber</span><strong class="money positive" id="pendingIncome">R$ 0,00</strong></article>
+          <article class="metric"><span>A pagar</span><strong class="money negative" id="pendingExpense">R$ 0,00</strong></article>
+        </div>
+
+        <div class="section-heading"><div><span class="overline">AGORA</span><h2>Próximos compromissos</h2></div><button class="text-button" data-nav="agenda">Ver agenda</button></div>
+        <div class="timeline" id="nextItems"></div>
+
+        <div class="section-heading"><div><span class="overline">RITMO</span><h2>Previsto x realizado</h2></div></div>
+        <article class="card comparison-card">
+          <div class="comparison-row"><span>Entradas</span><div class="bar"><i id="incomeBar"></i></div><strong id="incomeComparison">R$ 0 / R$ 0</strong></div>
+          <div class="comparison-row"><span>Saídas</span><div class="bar"><i class="expense" id="expenseBar"></i></div><strong id="expenseComparison">R$ 0 / R$ 0</strong></div>
+        </article>
+      </section>
+
+      <section class="view" data-view="moves">
+        <div class="section-heading"><div><span class="overline">HISTÓRICO</span><h2>Movimentações</h2></div><button class="primary-button" data-open="transaction">+ Adicionar</button></div>
+        <div class="toolbar"><input id="searchTransactions" type="search" placeholder="Buscar por descrição ou categoria"><select id="transactionFilter" aria-label="Filtrar movimentações"><option value="all">Todas</option><option value="entrada">Entradas</option><option value="saida">Saídas</option></select></div>
+        <div class="grouped-list" id="transactionList"></div>
+      </section>
+
+      <section class="view" data-view="agenda">
+        <div class="section-heading"><div><span class="overline">CONTROLE</span><h2>Agenda financeira</h2></div><button class="primary-button" data-open="commitment">+ Conta</button></div>
+        <div class="month-switcher compact"><button class="icon-button" data-month="-1">‹</button><strong id="agendaMonthLabel"></strong><button class="icon-button" data-month="1">›</button></div>
+        <div class="status-strip" id="agendaStats"></div>
+        <div class="segmented" id="agendaFilters"><button class="active" data-agenda-filter="pending">Pendentes</button><button data-agenda-filter="late">Atrasadas</button><button data-agenda-filter="paid">Pagas</button><button data-agenda-filter="all">Todas</button></div>
+        <div class="timeline" id="agendaList"></div>
+      </section>
+
+      <section class="view" data-view="plan">
+        <div class="section-heading"><div><span class="overline">FUTURO</span><h2>Planejamento</h2></div></div>
+        <article class="card runway"><span>Projeção em 12 meses</span><strong class="money" id="twelveMonthResult">R$ 0,00</strong><p id="balancePoint">Ponto de equilíbrio: —</p></article>
+        <div class="section-heading"><h2>Fluxo mensal</h2></div>
+        <div class="forecast" id="forecastList"></div>
+        <div class="section-heading"><div><span class="overline">OBJETIVOS</span><h2>Metas</h2></div><button class="text-button" data-open="goal">+ Criar meta</button></div>
+        <div class="goal-grid" id="goalList"></div>
+        <div class="section-heading"><div><span class="overline">DECISÃO</span><h2>Simulador de compra</h2></div></div>
+        <article class="card simulator"><label>Valor da compra<input id="simValue" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00"></label><label>Parcela mensal<input id="simMonthly" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00"></label><label>Por quantos meses<input id="simMonths" type="number" min="1" value="12"></label><button class="primary-button" id="simulateButton">Analisar compra</button><div class="simulation-result" id="simulationResult" hidden></div></article>
+      </section>
+
+      <section class="view" data-view="settings">
+        <div class="section-heading"><div><span class="overline">PREFERÊNCIAS</span><h2>Seu controle</h2></div></div>
+        <div class="settings-list">
+          <button data-open="balance"><span><strong>Ajustar saldo</strong><small>Informe quanto você tem hoje</small></span><b>›</b></button>
+          <button data-open="income"><span><strong>Fontes de renda</strong><small>Salário, benefício e renda extra</small></span><b>›</b></button>
+          <button data-open="commitment"><span><strong>Contas e parcelas</strong><small>Cadastre recorrências e parcelamentos</small></span><b>›</b></button>
+          <button data-open="debt"><span><strong>Dívidas e acordos</strong><small>Acompanhe saldo e estratégia de quitação</small></span><b>›</b></button>
+          <button id="exportButton"><span><strong>Exportar backup</strong><small>Baixe uma cópia dos seus dados</small></span><b>↓</b></button>
+          <button id="importButton"><span><strong>Importar backup</strong><small>Restaure um arquivo validado</small></span><b>↑</b></button>
+          <input id="importFile" type="file" accept="application/json" hidden>
+          <button id="resetButton" class="danger-row"><span><strong>Apagar todos os dados</strong><small>Recomece com um controle vazio</small></span><b>×</b></button>
+        </div>
+        <div class="section-heading"><h2>Fontes de renda</h2></div><div class="manager-list" id="incomeManager"></div>
+        <div class="section-heading"><h2>Contas e parcelas</h2></div><div class="manager-list" id="commitmentManager"></div>
+        <div class="section-heading"><h2>Dívidas e acordos</h2></div><div class="manager-list" id="debtManager"></div>
+        <article class="privacy-note"><strong>Privado por padrão</strong><p>Seus dados ficam somente neste dispositivo. O app não envia informações financeiras para servidores.</p><span id="storageStatus">Banco local ativo</span></article>
+      </section>
+    </main>
+  </div>
+
+  <button class="fab" data-open="transaction" aria-label="Adicionar movimentação">+</button>
+  <nav class="bottom-nav" aria-label="Navegação principal">
+    <button class="active" data-nav="home"><span>⌂</span>Início</button>
+    <button data-nav="moves"><span>↕</span>Movimentos</button>
+    <button data-nav="agenda"><span>□</span>Agenda</button>
+    <button data-nav="plan"><span>◔</span>Planejar</button>
+    <button data-nav="settings"><span>•••</span>Mais</button>
+  </nav>
+
+  <dialog id="editorDialog"><form method="dialog" id="editorForm"><div class="dialog-head"><div><span class="overline" id="dialogEyebrow">NOVO</span><h2 id="dialogTitle">Adicionar</h2></div><button class="icon-button" value="cancel" aria-label="Fechar">×</button></div><div id="dialogFields" class="form-grid"></div><div class="dialog-actions"><button class="secondary-button" value="cancel">Cancelar</button><button class="primary-button" id="dialogSave" value="default">Salvar</button></div></form></dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="update-banner" id="updateBanner" hidden><span>Uma nova versão está pronta.</span><button id="updateButton">Atualizar</button></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

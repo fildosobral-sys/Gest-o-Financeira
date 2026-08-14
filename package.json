@@ -1,0 +1,9 @@
+{
+  "name": "meu-financeiro-v4",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "check": "node --check js/domain.js && node --check js/storage.js && node --check js/app.js && node --test tests/*.test.js"
+  }
+}
