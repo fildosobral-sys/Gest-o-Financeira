@@ -1,4 +1,4 @@
-const CACHE = 'meu-financeiro-v4.2-20260814';
+const CACHE = 'meu-financeiro-v4.3-20260814';
 const ASSETS = ['./', './index.html', './styles.css', './managers.css', './ui-fixes.css', './manifest.json', './js/app.js', './js/domain.js', './js/storage.js', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', event => {
