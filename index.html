@@ -101,6 +101,7 @@
         <div class="section-heading"><div><span class="overline">CONTROLE</span><h2>Agenda financeira</h2></div><button class="primary-button" data-open="commitment">+ Conta</button></div>
         <div class="month-switcher compact"><button class="icon-button" data-month="-1">‹</button><strong id="agendaMonthLabel"></strong><button class="icon-button" data-month="1">›</button></div>
         <div class="status-strip" id="agendaStats"></div>
+        <div id="agendaDebtPlan"></div>
         <div class="segmented" id="agendaFilters"><button class="active" data-agenda-filter="pending">Pendentes</button><button data-agenda-filter="late">Atrasadas</button><button data-agenda-filter="paid">Pagas</button><button data-agenda-filter="all">Todas</button></div>
         <div class="timeline" id="agendaList"></div>
       </section>
@@ -157,7 +158,7 @@
     <button data-nav="settings"><span>•••</span>Mais</button>
   </nav>
 
-  <dialog id="editorDialog"><form method="dialog" id="editorForm"><div class="dialog-head"><div><span class="overline" id="dialogEyebrow">NOVO</span><h2 id="dialogTitle">Adicionar</h2></div><button type="button" class="icon-button" data-dialog-close aria-label="Fechar">×</button></div><div id="dialogFields" class="form-grid"></div><div class="dialog-actions"><button type="button" class="secondary-button" data-dialog-close>Cancelar</button><button type="submit" class="primary-button" id="dialogSave" value="default">Salvar</button></div></form></dialog>
+  <dialog id="editorDialog"><form method="dialog" id="editorForm"><div class="dialog-head"><div><span class="overline" id="dialogEyebrow">NOVO</span><h2 id="dialogTitle">Adicionar</h2></div><button type="button" class="icon-button" data-dialog-close aria-label="Fechar">×</button></div><div id="dialogFields" class="form-grid"></div><div class="dialog-actions"><button type="button" class="secondary-button danger-button" id="dialogUndoPayment" hidden>Desfazer confirmação</button><span class="dialog-actions-spacer"></span><button type="button" class="secondary-button" data-dialog-close>Cancelar</button><button type="submit" class="primary-button" id="dialogSave" value="default">Salvar</button></div></form></dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <div class="update-banner" id="updateBanner" hidden role="status">
     <span><strong>Atualização pronta</strong><small>Leva só alguns segundos.</small></span>

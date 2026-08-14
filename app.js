@@ -153,13 +153,16 @@ function timelineItem(item) {
   const view = activeState();
   const status = entryStatus(view, item, selectedMonth);
   const paid = status === 'paid';
-  const member = memberById(item.memberId);
+  const payment = paid ? view.transactions.find(tx => tx.linkType === item.kind && tx.linkId === item.id && tx.monthKey === monthKey(selectedMonth)) : null;
+  const member = memberById(payment?.memberId || item.memberId);
+  const displayedDate = payment?.date || item.date;
+  const displayedValue = payment ? Number(payment.value) : Number(item.value);
   return `<article class="timeline-item">
-    <div class="date-tile"><strong>${localDate(item.date).getDate()}</strong><span>${shortMonth(localDate(item.date))}</span></div>
+    <div class="date-tile"><strong>${localDate(displayedDate).getDate()}</strong><span>${shortMonth(localDate(displayedDate))}</span></div>
     <i class="status-dot ${status}"></i>
     <div class="item-copy"><strong>${escapeHtml(item.name)}${item.installmentNo ? ` · ${item.installmentNo}/${item.total}` : ''}</strong><span>${paid ? 'Realizado' : status === 'late' ? 'Atrasado' : status === 'soon' ? 'Vence em breve' : 'Previsto'}</span><span class="timeline-member">${escapeHtml(member.name)}</span></div>
-    <div class="item-amount ${item.isIncome ? 'positive' : 'negative'}">${item.isIncome ? '+' : '−'} ${money(item.value)}</div>
-    ${paid ? '' : `<button class="icon-button" data-record="${escapeHtml(item.kind)}|${escapeHtml(item.id)}" title="Marcar como realizado" aria-label="Marcar ${escapeHtml(item.name)} como realizado">✓</button>`}
+    <div class="item-amount ${item.isIncome ? 'positive' : 'negative'}">${item.isIncome ? '+' : '−'} ${money(displayedValue)}</div>
+    ${paid ? `<button class="icon-button paid-action" data-edit-paid="${escapeHtml(payment?.id || '')}" title="Corrigir ou desfazer" aria-label="Corrigir ou desfazer ${escapeHtml(item.name)}">↺</button>` : `<button class="icon-button" data-record="${escapeHtml(item.kind)}|${escapeHtml(item.id)}" title="Marcar como realizado" aria-label="Marcar ${escapeHtml(item.name)} como realizado">✓</button>`}
   </article>`;
 }
 
@@ -185,6 +188,9 @@ function renderAgenda() {
   const counts = { pending: 0, late: 0, paid: 0 };
   entries.forEach(item => { const status = entryStatus(view, item, selectedMonth); counts[status === 'soon' ? 'pending' : status] += 1; });
   $('#agendaStats').innerHTML = `<div class="status-pill"><span>PENDENTES</span><strong>${counts.pending}</strong></div><div class="status-pill"><span>ATRASADAS</span><strong class="negative">${counts.late}</strong></div><div class="status-pill"><span>REALIZADAS</span><strong class="positive">${counts.paid}</strong></div>`;
+  const plannedDebts = view.debts.filter(item => Number(item.balance) > 0 && (item.paymentMode === 'planned' || Number(item.monthly) <= 0));
+  const plannedTotal = plannedDebts.reduce((sum, item) => sum + Number(item.balance || 0), 0);
+  $('#agendaDebtPlan').innerHTML = plannedDebts.length ? `<article class="agenda-debt-plan"><div><strong>🧭 ${plannedDebts.length} ${plannedDebts.length === 1 ? 'dívida para planejar' : 'dívidas para planejar'} · ${money(plannedTotal)}</strong><small>Visível para planejamento, sem descontar do seu mês.</small></div><button data-nav="plan">Ver dívidas</button></article>` : `<article class="agenda-debt-plan"><div><strong>🤝 Deve para alguém, mas ainda não paga mensalmente?</strong><small>Cadastre como dívida para planejar, sem comprometer a renda mensal.</small></div><button data-open="debt">+ Dívida</button></article>`;
   const filtered = entries.filter(item => {
     const status = entryStatus(view, item, selectedMonth);
     return agendaFilter === 'all' || status === agendaFilter || (agendaFilter === 'pending' && status === 'soon');
@@ -219,7 +225,10 @@ function renderDebtCenter(view) {
   $('#debtCenter').innerHTML = view.debts.length ? view.debts.map(item => {
     const late = ['Atrasado', 'Renegociar'].includes(item.status);
     const installments = Number(item.remaining || item.installments || 0);
-    return `<button class="debt-card" data-edit-debt="${escapeHtml(item.id)}"><header><span>${late ? '🔴' : '🟢'} ${escapeHtml(item.status || 'Acompanhar')}</span><small>dia ${Number(item.day) || '—'}</small></header><strong>${escapeHtml(item.name)}</strong><small>Saldo: ${money(item.balance)} · Parcela: ${money(item.monthly)}</small><small>${installments ? `${installments} parcelas restantes` : 'Prazo ainda não informado'}</small><div class="strategy">🎯 ${escapeHtml(item.strategy || item.proposal || 'Defina a estratégia de quitação')}</div></button>`;
+    const planned = item.paymentMode === 'planned' || Number(item.monthly) <= 0;
+    const target = item.expectedPayDate ? `Meta: ${formatDate(item.expectedPayDate)}` : 'Data-alvo ainda não definida';
+    const funding = { extra: 'renda extra', monthly: 'sobra mensal', undefined: 'origem a definir' }[item.fundingSource] || 'origem a definir';
+    return `<button class="debt-card ${planned ? 'planned-debt' : ''}" data-edit-debt="${escapeHtml(item.id)}"><header><span>${planned ? '🟡 Planejar' : late ? '🔴' : '🟢'} ${planned ? '' : escapeHtml(item.status || 'Acompanhar')}</span><small>${planned ? escapeHtml(target) : `dia ${Number(item.day) || '—'}`}</small></header><strong>${escapeHtml(item.name)}</strong><small>Saldo devedor: ${money(item.balance)}</small>${planned ? `<small class="debt-mode">Não compromete o mês · pagar com ${escapeHtml(funding)}</small>` : `<small>Parcela: ${money(item.monthly)} · ${installments ? `${installments} restantes` : 'prazo não informado'}</small>`}<div class="strategy">🎯 ${escapeHtml(item.strategy || item.proposal || 'Defina a estratégia de quitação')}</div></button>`;
   }).join('') : empty('Cadastre suas dívidas para visualizar saldo, parcela, situação e estratégia.');
 }
 
@@ -241,7 +250,7 @@ function renderSettings() {
   $('#incomeManager').innerHTML = state.incomes.length ? state.incomes.map(item => `<button class="manager-item" data-edit-income="${escapeHtml(item.id)}"><span><strong>${item.availability === 'regular' ? '🟢' : '🟡'} ${escapeHtml(item.name)}</strong><small>${item.schedule === 'second-business-day' ? '2º dia útil' : `Dia ${item.day}`} · ${item.active === false ? 'fora da projeção' : item.availability === 'regular' ? 'renda regular' : 'prevista'}</small></span><b class="positive">${money(item.value)}</b></button>`).join('') : empty('Nenhuma renda cadastrada.');
   $('#extraManager').innerHTML = state.extras.length ? state.extras.sort((a, b) => String(a.date).localeCompare(String(b.date))).map(item => `<button class="manager-item" data-edit-extra="${escapeHtml(item.id)}"><span><strong>${extraTypeLabel(item.type)} · ${escapeHtml(item.name)}</strong><small>${item.date ? localDate(item.date).toLocaleDateString('pt-BR') : 'Sem data'} · ${item.active === false ? 'fora da projeção' : item.confidence === 'confirmed' ? 'confirmada' : item.confidence === 'likely' ? 'provável' : 'possível'}</small></span><b class="positive">${money(item.value)}</b></button>`).join('') : empty('Nenhuma renda extraordinária cadastrada.');
   $('#commitmentManager').innerHTML = state.commitments.length ? state.commitments.map(item => `<button class="manager-item" data-edit-commitment="${escapeHtml(item.id)}"><span><strong>${escapeHtml(item.name)}</strong><small>${item.recurring ? 'Recorrente' : `${item.installments} parcelas`} · dia ${item.day}</small></span><b class="negative">${money(item.value)}</b></button>`).join('') : empty('Nenhuma conta cadastrada.');
-  $('#debtManager').innerHTML = state.debts.length ? state.debts.map(item => `<button class="manager-item" data-edit-debt="${escapeHtml(item.id)}"><span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.status || 'Acompanhar')} · ${escapeHtml(item.strategy || 'Sem estratégia')}</small></span><b>${money(item.balance)}</b></button>`).join('') : empty('Nenhuma dívida cadastrada.');
+  $('#debtManager').innerHTML = state.debts.length ? state.debts.map(item => { const planned = item.paymentMode === 'planned' || Number(item.monthly) <= 0; return `<button class="manager-item" data-edit-debt="${escapeHtml(item.id)}"><span><strong>${planned ? '🧭' : '📅'} ${escapeHtml(item.name)}</strong><small>${planned ? 'Planejar · não compromete o mês' : `${escapeHtml(item.status || 'Acompanhar')} · ${money(item.monthly)}/mês`} · ${escapeHtml(item.strategy || 'Sem estratégia')}</small></span><b>${money(item.balance)}</b></button>`; }).join('') : empty('Nenhuma dívida cadastrada.');
 }
 
 function renderAll() {
@@ -273,8 +282,9 @@ function openEditor(type, existing = null, prefill = {}) {
   dialogContext = { type, id: existing?.id || null, prefill };
   let title = 'Adicionar'; let eyebrow = 'NOVO'; let fields = '';
   if (type === 'transaction') {
-    title = existing ? 'Editar movimentação' : 'Nova movimentação'; eyebrow = 'MOVIMENTO';
-    fields = select('Tipo', 'type', existing?.type || prefill.type || 'saida', [['entrada', 'Entrada'], ['saida', 'Saída']]) +
+    const linkedPayment = Boolean(existing?.linkType);
+    title = linkedPayment ? 'Corrigir confirmação' : existing ? 'Editar movimentação' : 'Nova movimentação'; eyebrow = linkedPayment ? 'PAGAMENTO OU RECEBIMENTO REALIZADO' : 'MOVIMENTO';
+    fields = (linkedPayment ? `<p class="form-note">Altere a data, a descrição ou o valor. Para voltar o item à Agenda como pendente, use “Desfazer confirmação”.</p><input type="hidden" name="type" value="${escapeHtml(existing.type)}">` : select('Tipo', 'type', existing?.type || prefill.type || 'saida', [['entrada', 'Entrada'], ['saida', 'Saída']])) +
       field('Data', 'date', 'date', existing?.date || prefill.date || new Date().toISOString().slice(0, 10)) +
       field('Descrição', 'desc', 'text', existing?.desc || prefill.desc || '', { class: 'full', required: true, maxlength: 100 }) +
       select('Categoria', 'cat', existing?.cat || prefill.cat || 'Outros', ['Alimentação', 'Casa', 'Transporte', 'Saúde', 'Educação', 'Dívida', 'Salário', 'Extra', 'Outros'].map(item => [item, item])) +
@@ -317,13 +327,18 @@ function openEditor(type, existing = null, prefill = {}) {
     fields = field('Total disponível em contas e carteira', 'balance', 'number', cashNow(state), { class: 'full', step: 0.01, required: true });
   } else if (type === 'debt') {
     title = existing ? 'Editar dívida' : 'Nova dívida ou acordo'; eyebrow = 'DÍVIDA';
-    fields = field('Nome', 'name', 'text', existing?.name || '', { class: 'full', required: true, maxlength: 100 }) +
+    const paymentMode = existing?.paymentMode || (Number(existing?.monthly) > 0 ? 'installment' : 'planned');
+    fields = field('Pessoa ou credor', 'name', 'text', existing?.name || '', { class: 'full', required: true, maxlength: 100 }) +
       field('Saldo devedor', 'balance', 'number', existing?.balance || '', { min: 0, step: 0.01, required: true }) +
-      select('Status', 'status', existing?.status || 'Atrasado', [['Atrasado', 'Atrasado'], ['Em dia', 'Em dia'], ['Renegociar', 'Renegociar'], ['Aguardar', 'Aguardar']]) +
-      field('Parcela do acordo', 'monthly', 'number', existing?.monthly || 0, { min: 0, step: 0.01 }) +
-      field('Primeiro vencimento', 'start', 'date', existing?.start || new Date().toISOString().slice(0, 10)) +
+      select('Forma de acompanhamento', 'paymentMode', paymentMode, [['planned', '🧭 Planejar — sem descontar do mês'], ['installment', '📅 Acordo com parcela mensal']]) +
+      select('Status', 'status', existing?.status || 'Aguardar', [['Atrasado', 'Atrasado'], ['Em dia', 'Em dia'], ['Renegociar', 'Renegociar'], ['Aguardar', 'Aguardar']]) +
+      field('Parcela mensal (somente se houver acordo)', 'monthly', 'number', existing?.monthly || 0, { min: 0, step: 0.01 }) +
+      field('Primeiro vencimento do acordo', 'start', 'date', existing?.start || '') +
       field('Dia da parcela', 'day', 'number', existing?.day || 1, { min: 1, max: 31 }) +
       field('Parcelas restantes', 'remaining', 'number', existing?.remaining || '', { min: 0, max: 999 }) +
+      field('Previsão para quitar ou começar a pagar', 'expectedPayDate', 'date', existing?.expectedPayDate || '') +
+      select('Dinheiro previsto para pagar', 'fundingSource', existing?.fundingSource || 'extra', [['extra', '✨ Renda extra'], ['monthly', '💰 Sobra mensal'], ['undefined', '❔ Ainda vou definir']]) +
+      select('Prioridade', 'priority', existing?.priority || 'media', [['alta', '🔴 Alta'], ['media', '🟡 Média'], ['baixa', '🟢 Baixa']]) +
       field('Entrada da proposta', 'proposalEntry', 'number', existing?.proposalEntry || 0, { min: 0, step: 0.01 }) +
       field('Estratégia', 'strategy', 'text', existing?.strategy || '', { class: 'full', maxlength: 160 }) +
       field('Proposta/observação', 'proposal', 'text', existing?.proposal || '', { class: 'full', maxlength: 180 });
@@ -339,6 +354,7 @@ function openEditor(type, existing = null, prefill = {}) {
   }
   if (['transaction', 'commitment', 'income', 'extra', 'goal', 'debt'].includes(type)) fields += select('Pertence a', 'memberId', existing?.memberId || prefill.memberId || (memberFilter === 'all' ? 'primary' : memberFilter), memberChoices(), true);
   $('#dialogTitle').textContent = title; $('#dialogEyebrow').textContent = eyebrow; $('#dialogFields').innerHTML = fields;
+  $('#dialogUndoPayment').hidden = !(type === 'transaction' && existing?.linkType);
   $('#editorDialog').showModal();
 }
 
@@ -347,7 +363,16 @@ async function saveEditor(formData) {
   const { type, id, prefill } = dialogContext;
   if (type === 'transaction') {
     const previous = state.transactions.find(item => item.id === id);
-    const item = stamp({ ...previous, id: id || uid(), type: data.type, date: data.date, desc: data.desc.trim(), cat: data.cat, value: Number(data.value), memberId: data.memberId, ...prefill });
+    const item = stamp({ ...previous, id: id || uid(), type: data.type, date: data.date, desc: data.desc.trim(), cat: data.cat, value: Number(data.value), memberId: data.memberId, ...prefill, monthKey: previous?.linkType ? monthKey(localDate(data.date)) : previous?.monthKey });
+    if (previous?.linkType === 'debt') {
+      state.debts = state.debts.map(debt => {
+        if (debt.id !== previous.linkId) return debt;
+        const balance = Number.isFinite(Number(previous.debtBalanceBefore))
+          ? Math.max(0, Number(previous.debtBalanceBefore) - Number(item.value))
+          : Math.max(0, Number(debt.balance || 0) + Number(previous.value || 0) - Number(item.value));
+        return stamp({ ...debt, balance, status: balance <= 0 ? 'Em dia' : debt.status });
+      });
+    }
     state.transactions = id ? state.transactions.map(entry => entry.id === id ? item : entry) : [...state.transactions, item];
   } else if (type === 'commitment') {
     const previous = state.commitments.find(item => item.id === id);
@@ -370,7 +395,8 @@ async function saveEditor(formData) {
     state.initialBalance = Number(data.balance) - transactionSum;
   } else if (type === 'debt') {
     const previous = state.debts.find(item => item.id === id);
-    const item = stamp({ ...previous, id: id || uid(), name: data.name.trim(), balance: Number(data.balance), status: data.status, monthly: Number(data.monthly), start: data.start, day: Number(data.day), remaining: Number(data.remaining) || 0, proposalEntry: Number(data.proposalEntry) || 0, strategy: data.strategy.trim(), proposal: data.proposal.trim(), memberId: data.memberId });
+    const planned = data.paymentMode === 'planned';
+    const item = stamp({ ...previous, id: id || uid(), name: data.name.trim(), balance: Number(data.balance), status: data.status, paymentMode: data.paymentMode, monthly: planned ? 0 : Number(data.monthly), start: planned ? '' : data.start, day: Number(data.day), remaining: planned ? 0 : Number(data.remaining) || 0, expectedPayDate: data.expectedPayDate || '', fundingSource: data.fundingSource, priority: data.priority, proposalEntry: Number(data.proposalEntry) || 0, strategy: data.strategy.trim(), proposal: data.proposal.trim(), memberId: data.memberId });
     state.debts = id ? state.debts.map(entry => entry.id === id ? item : entry) : [...state.debts, item];
   } else if (type === 'member') {
     const previous = state.members.find(item => item.id === id);
@@ -387,9 +413,31 @@ async function saveEditor(formData) {
 async function recordEntry(kind, id) {
   const entry = agendaEntries(state, selectedMonth).find(item => item.kind === kind && item.id === id);
   if (!entry) return;
-  state.transactions.push(stamp({ id: uid(), type: entry.isIncome ? 'entrada' : 'saida', date: entry.date, desc: entry.name, cat: entry.kind === 'extra' ? 'Extra' : entry.isIncome ? 'Salário' : entry.kind === 'debt' ? 'Dívida' : 'Outros', value: entry.value, memberId: entry.memberId || 'primary', linkType: entry.kind, linkId: entry.id, monthKey: monthKey(selectedMonth) }));
+  const debtBefore = kind === 'debt' ? state.debts.find(item => item.id === id) : null;
+  state.transactions.push(stamp({ id: uid(), type: entry.isIncome ? 'entrada' : 'saida', date: entry.date, desc: entry.name, cat: entry.kind === 'extra' ? 'Extra' : entry.isIncome ? 'Salário' : entry.kind === 'debt' ? 'Dívida' : 'Outros', value: entry.value, memberId: entry.memberId || 'primary', linkType: entry.kind, linkId: entry.id, monthKey: monthKey(selectedMonth), ...(debtBefore ? { debtBalanceBefore: Number(debtBefore.balance || 0), debtRemainingBefore: Number(debtBefore.remaining || 0), debtStatusBefore: debtBefore.status } : {}) }));
   if (kind === 'debt') state.debts = state.debts.map(item => item.id === id ? stamp({ ...item, balance: Math.max(0, Number(item.balance || 0) - entry.value), remaining: Number(item.remaining || 0) > 0 ? Number(item.remaining) - 1 : 0, status: Number(item.balance || 0) - entry.value <= 0 ? 'Em dia' : item.status }) : item);
   await persist(entry.isIncome ? 'Recebimento registrado.' : 'Pagamento registrado.');
+}
+
+async function undoPayment(transactionId) {
+  const transaction = state.transactions.find(item => item.id === transactionId && item.linkType);
+  if (!transaction) return;
+  if (!confirm(`Desfazer a confirmação de “${transaction.desc || 'movimentação'}” e devolvê-la para a Agenda?`)) return;
+  if (transaction.linkType === 'debt') {
+    state.debts = state.debts.map(debt => {
+      if (debt.id !== transaction.linkId) return debt;
+      const hasSnapshot = Number.isFinite(Number(transaction.debtBalanceBefore));
+      return stamp({
+        ...debt,
+        balance: hasSnapshot ? Number(transaction.debtBalanceBefore) : Number(debt.balance || 0) + Number(transaction.value || 0),
+        remaining: hasSnapshot ? Number(transaction.debtRemainingBefore || 0) : Number(debt.remaining || 0) + 1,
+        status: hasSnapshot ? transaction.debtStatusBefore || debt.status : debt.status
+      });
+    });
+  }
+  state.transactions = state.transactions.filter(item => item.id !== transaction.id);
+  $('#editorDialog').close();
+  await persist('Confirmação desfeita. O item voltou para a Agenda.');
 }
 
 function simulate() {
@@ -462,6 +510,7 @@ document.addEventListener('click', async event => {
   const month = event.target.closest('[data-month]'); if (month) { selectedMonth = month.dataset.month === 'today' ? startOfMonth(new Date()) : addMonths(selectedMonth, Number(month.dataset.month)); renderAll(); }
   const opener = event.target.closest('[data-open]'); if (opener) openEditor(opener.dataset.open);
   const record = event.target.closest('[data-record]'); if (record) { const [kind, id] = record.dataset.record.split('|'); await recordEntry(kind, id); }
+  const editPaid = event.target.closest('[data-edit-paid]'); if (editPaid?.dataset.editPaid) openEditor('transaction', state.transactions.find(item => item.id === editPaid.dataset.editPaid));
   const editTx = event.target.closest('[data-edit-transaction]'); if (editTx) openEditor('transaction', state.transactions.find(item => item.id === editTx.dataset.editTransaction));
   const editGoal = event.target.closest('[data-edit-goal]'); if (editGoal) openEditor('goal', state.goals.find(item => item.id === editGoal.dataset.editGoal));
   const editIncome = event.target.closest('[data-edit-income]'); if (editIncome) openEditor('income', state.incomes.find(item => item.id === editIncome.dataset.editIncome));
@@ -480,6 +529,7 @@ $('.fab').addEventListener('pointerdown', event => {
 $('#editorDialog').addEventListener('click', event => { if (event.target === event.currentTarget) event.currentTarget.close(); });
 
 $('#editorForm').addEventListener('submit', event => { event.preventDefault(); if (event.submitter?.value === 'cancel') { $('#editorDialog').close(); return; } if (event.currentTarget.reportValidity()) saveEditor(new FormData(event.currentTarget)); });
+$('#dialogUndoPayment').addEventListener('click', () => undoPayment(dialogContext?.id));
 $('#searchTransactions').addEventListener('input', renderTransactions);
 $('#transactionFilter').addEventListener('change', renderTransactions);
 $('#memberFilter').addEventListener('change', event => { memberFilter = event.target.value; renderAll(); });

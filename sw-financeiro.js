@@ -1,5 +1,5 @@
 const FINANCE_CACHE_PREFIX = 'meu-financeiro-familiar-';
-const CACHE = `${FINANCE_CACHE_PREFIX}v533-icone-legivel`;
+const CACHE = `${FINANCE_CACHE_PREFIX}v540-dividas-planejadas-pagamentos-reversiveis`;
 const APP_SCOPE_PATH = '/Gest-o-Financeira/';
 const ASSETS = ['./', './index.html', './styles.css', './managers.css', './ui-fixes.css', './family.css', './decision.css', './manifest.json', './manifest-financeiro.webmanifest', './app.js', './domain.js', './storage.js', './icone-financeiro-180.png', './icone-financeiro-192.png', './icone-financeiro-512.png'];
 

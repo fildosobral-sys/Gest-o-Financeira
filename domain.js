@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export const emptyState = () => ({
   version: SCHEMA_VERSION,
@@ -90,6 +90,13 @@ export function migrateState(raw) {
     recurring: item.recurring ?? Number(item.installments) === 999,
     installments: Number(item.installments) === 999 ? null : Math.max(1, Number(item.installments) || 1),
     active: item.active !== false
+  }));
+  state.debts = state.debts.map(item => ({
+    ...item,
+    paymentMode: item.paymentMode || (Number(item.monthly) > 0 ? 'installment' : 'planned'),
+    expectedPayDate: item.expectedPayDate || '',
+    fundingSource: item.fundingSource || 'extra',
+    priority: item.priority || 'media'
   }));
   state.incomes = state.incomes.map(item => ({ ...item, active: item.active !== false }));
   state.version = SCHEMA_VERSION;
