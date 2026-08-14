@@ -10,6 +10,7 @@
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="managers.css">
+  <link rel="stylesheet" href="ui-fixes.css">
   <title>Meu Financeiro</title>
 </head>
 <body>
@@ -122,7 +123,10 @@
 
   <dialog id="editorDialog"><form method="dialog" id="editorForm"><div class="dialog-head"><div><span class="overline" id="dialogEyebrow">NOVO</span><h2 id="dialogTitle">Adicionar</h2></div><button class="icon-button" value="cancel" aria-label="Fechar">×</button></div><div id="dialogFields" class="form-grid"></div><div class="dialog-actions"><button class="secondary-button" value="cancel">Cancelar</button><button class="primary-button" id="dialogSave" value="default">Salvar</button></div></form></dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <div class="update-banner" id="updateBanner" hidden><span>Uma nova versão está pronta.</span><button id="updateButton">Atualizar</button></div>
+  <div class="update-banner" id="updateBanner" hidden role="status">
+    <span><strong>Atualização pronta</strong><small>Leva só alguns segundos.</small></span>
+    <div><button class="update-later" id="updateLaterButton">Depois</button><button id="updateButton">Atualizar</button></div>
+  </div>
 
   <script type="module" src="js/app.js"></script>
 </body>
