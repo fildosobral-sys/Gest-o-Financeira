@@ -1,7 +1,7 @@
 {
-  "name": "Meu Financeiro — Controle pessoal",
+  "name": "Meu Financeiro — Família",
   "short_name": "Meu Financeiro",
-  "description": "Gestão financeira pessoal, privada e mobile-first.",
+  "description": "Gestão financeira pessoal e familiar, privada e mobile-first.",
   "id": "/Gest-o-Financeira/",
   "start_url": "/Gest-o-Financeira/",
   "scope": "/Gest-o-Financeira/",

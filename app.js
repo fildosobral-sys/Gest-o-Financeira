@@ -1,13 +1,14 @@
 import {
   addMonths, agendaEntries, balancePoint, cashNow, entryStatus, localDate, money,
   monthKey, nextIncomeDate, occurrenceForCommit, releasedWithin, reservedUntilNextIncome,
-  scoreHealth, startOfMonth, totalsForMonth, transactionForMonth, uid
+  scoreHealth, startOfMonth, totalsForMonth, transactionForMonth, uid, mergeStates, stateForMember
 } from './domain.js';
 import { clearState, exportBackup, importBackup, loadState, saveState } from './storage.js';
 
 let state = await loadState();
 let selectedMonth = startOfMonth(new Date());
 let agendaFilter = 'pending';
+let memberFilter = 'all';
 let dialogContext = null;
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -18,6 +19,10 @@ const shortMonth = date => date.toLocaleDateString('pt-BR', { month: 'short' }).
 const formatDate = value => localDate(value).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '');
 const categoryIcon = category => ({ Alimentação: '◒', Casa: '⌂', Transporte: '◇', Saúde: '+', Educação: '▤', Dívida: '!', Salário: '↗', Extra: '✦' })[category] || '•';
 const empty = message => `<div class="empty-state">${escapeHtml(message)}</div>`;
+const activeState = () => stateForMember(state, memberFilter);
+const memberById = id => state.members.find(item => item.id === (id || 'primary')) || state.members[0];
+const memberChoices = () => state.members.filter(item => item.active !== false).map(item => [item.id, item.name]);
+const stamp = item => ({ ...item, updatedAt: new Date().toISOString() });
 
 async function persist(message) {
   state = await saveState(state);
@@ -43,12 +48,13 @@ function applyPreferences() {
 }
 
 function renderHome() {
-  const totals = totalsForMonth(state, selectedMonth);
-  const currentCash = cashNow(state);
-  const reserve = reservedUntilNextIncome(state);
+  const view = activeState();
+  const totals = totalsForMonth(view, selectedMonth);
+  const currentCash = cashNow(view);
+  const reserve = reservedUntilNextIncome(view);
   const safe = currentCash - reserve;
-  const score = scoreHealth(state, selectedMonth);
-  const nextIncome = nextIncomeDate(state);
+  const score = scoreHealth(view, selectedMonth);
+  const nextIncome = nextIncomeDate(view);
   $('#monthLabel').textContent = monthName(selectedMonth);
   $('#agendaMonthLabel').textContent = monthName(selectedMonth);
   $('#safeToSpend').textContent = money(safe);
@@ -62,8 +68,9 @@ function renderHome() {
   $('#healthRing').style.setProperty('--score', `${score}%`);
   renderInsight({ safe, score, totals });
 
-  const entries = agendaEntries(state, selectedMonth)
-    .filter(item => entryStatus(state, item, selectedMonth) !== 'paid')
+  renderFamilyOverview();
+  const entries = agendaEntries(view, selectedMonth)
+    .filter(item => entryStatus(view, item, selectedMonth) !== 'paid')
     .slice(0, 4);
   $('#nextItems').innerHTML = entries.length ? entries.map(timelineItem).join('') : empty('Nada pendente neste mês.');
 
@@ -74,9 +81,10 @@ function renderHome() {
 }
 
 function renderInsight({ safe, score, totals }) {
+  const view = activeState();
   let title = 'Sua base está pronta';
   let text = 'Continue registrando cada movimento para melhorar suas projeções.';
-  if (!state.incomes.length) { title = 'Cadastre sua renda'; text = 'Assim o app calcula o que realmente cabe no mês e quando você recebe.'; }
+  if (!view.incomes.length) { title = 'Cadastre sua renda'; text = 'Assim o app calcula o que realmente cabe no mês e quando você recebe.'; }
   else if (safe < 0) { title = `Faltam ${money(Math.abs(safe))} até a próxima renda`; text = 'Priorize essenciais e adie gastos que não sejam urgentes.'; }
   else if (totals.plannedExpense > totals.plannedIncome) { title = 'O mês está acima da renda'; text = `A diferença prevista é de ${money(totals.plannedExpense - totals.plannedIncome)}.`; }
   else if (score >= 80) { title = 'Boa margem de segurança'; text = 'Seu fluxo está saudável. Direcione parte da sobra para uma meta.'; }
@@ -84,13 +92,31 @@ function renderInsight({ safe, score, totals }) {
   $('#insightText').textContent = text;
 }
 
+function renderFamilyOverview() {
+  const cards = state.members.filter(item => item.active !== false).map(member => {
+    const view = stateForMember(state, member.id);
+    const totals = totalsForMonth(view, selectedMonth);
+    const debt = view.debts.reduce((sum, item) => sum + Number(item.balance || 0), 0);
+    return `<article class="family-member-card"><header><span class="member-avatar">${escapeHtml(member.name.slice(0, 1).toUpperCase())}</span><div><strong>${escapeHtml(member.name)}</strong><small>${escapeHtml(member.role || (member.type === 'household' ? 'Compartilhado' : 'Membro'))}</small></div></header><div class="member-values"><span>Entradas<b class="positive">${shortMoney(totals.plannedIncome)}</b></span><span>Saídas<b class="negative">${shortMoney(totals.plannedExpense)}</b></span><span>Dívidas<b>${shortMoney(debt)}</b></span><span>Resultado<b class="${totals.result >= 0 ? 'positive' : 'negative'}">${shortMoney(totals.result)}</b></span></div></article>`;
+  });
+  $('#familyOverview').innerHTML = cards.length ? cards.join('') : empty('Adicione os membros da família.');
+}
+
+function renderMemberFilter() {
+  if (memberFilter !== 'all' && !state.members.some(item => item.id === memberFilter && item.active !== false)) memberFilter = 'all';
+  const options = [['all', `Toda a ${state.household.name || 'família'}`], ...memberChoices()];
+  $('#memberFilter').innerHTML = options.map(([id, name]) => `<option value="${escapeHtml(id)}" ${id === memberFilter ? 'selected' : ''}>${escapeHtml(name)}</option>`).join('');
+}
+
 function timelineItem(item) {
-  const status = entryStatus(state, item, selectedMonth);
+  const view = activeState();
+  const status = entryStatus(view, item, selectedMonth);
   const paid = status === 'paid';
+  const member = memberById(item.memberId);
   return `<article class="timeline-item">
     <div class="date-tile"><strong>${localDate(item.date).getDate()}</strong><span>${shortMonth(localDate(item.date))}</span></div>
     <i class="status-dot ${status}"></i>
-    <div class="item-copy"><strong>${escapeHtml(item.name)}${item.installmentNo ? ` · ${item.installmentNo}/${item.total}` : ''}</strong><span>${paid ? 'Realizado' : status === 'late' ? 'Atrasado' : status === 'soon' ? 'Vence em breve' : 'Previsto'}</span></div>
+    <div class="item-copy"><strong>${escapeHtml(item.name)}${item.installmentNo ? ` · ${item.installmentNo}/${item.total}` : ''}</strong><span>${paid ? 'Realizado' : status === 'late' ? 'Atrasado' : status === 'soon' ? 'Vence em breve' : 'Previsto'}</span><span class="timeline-member">${escapeHtml(member.name)}</span></div>
     <div class="item-amount ${item.isIncome ? 'positive' : 'negative'}">${item.isIncome ? '+' : '−'} ${money(item.value)}</div>
     ${paid ? '' : `<button class="icon-button" data-record="${escapeHtml(item.kind)}|${escapeHtml(item.id)}" title="Marcar como realizado" aria-label="Marcar ${escapeHtml(item.name)} como realizado">✓</button>`}
   </article>`;
@@ -99,7 +125,7 @@ function timelineItem(item) {
 function renderTransactions() {
   const query = $('#searchTransactions').value.trim().toLocaleLowerCase('pt-BR');
   const filter = $('#transactionFilter').value;
-  const transactions = transactionForMonth(state, selectedMonth)
+  const transactions = transactionForMonth(activeState(), selectedMonth)
     .filter(item => filter === 'all' || item.type === filter)
     .filter(item => !query || `${item.desc} ${item.cat}`.toLocaleLowerCase('pt-BR').includes(query))
     .sort((a, b) => b.date.localeCompare(a.date));
@@ -108,43 +134,46 @@ function renderTransactions() {
   $('#transactionList').innerHTML = transactions.map(item => {
     const heading = item.date !== lastDate ? `<div class="group-label">${localDate(item.date).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}</div>` : '';
     lastDate = item.date;
-    return `${heading}<article class="transaction-item"><div class="transaction-icon">${categoryIcon(item.cat)}</div><div class="item-copy"><strong>${escapeHtml(item.desc || item.cat || 'Movimentação')}</strong><span>${escapeHtml(item.cat || 'Outros')}</span></div><div class="item-amount ${item.type === 'entrada' ? 'positive' : 'negative'}">${item.type === 'entrada' ? '+' : '−'} ${money(item.value)}</div><button data-edit-transaction="${escapeHtml(item.id)}" aria-label="Editar">•••</button></article>`;
+    return `${heading}<article class="transaction-item"><div class="transaction-icon">${categoryIcon(item.cat)}</div><div class="item-copy"><strong>${escapeHtml(item.desc || item.cat || 'Movimentação')}</strong><span>${escapeHtml(item.cat || 'Outros')} · ${escapeHtml(memberById(item.memberId).name)}</span></div><div class="item-amount ${item.type === 'entrada' ? 'positive' : 'negative'}">${item.type === 'entrada' ? '+' : '−'} ${money(item.value)}</div><button data-edit-transaction="${escapeHtml(item.id)}" aria-label="Editar">•••</button></article>`;
   }).join('');
 }
 
 function renderAgenda() {
-  const entries = agendaEntries(state, selectedMonth);
+  const view = activeState();
+  const entries = agendaEntries(view, selectedMonth);
   const counts = { pending: 0, late: 0, paid: 0 };
-  entries.forEach(item => { const status = entryStatus(state, item, selectedMonth); counts[status === 'soon' ? 'pending' : status] += 1; });
+  entries.forEach(item => { const status = entryStatus(view, item, selectedMonth); counts[status === 'soon' ? 'pending' : status] += 1; });
   $('#agendaStats').innerHTML = `<div class="status-pill"><span>PENDENTES</span><strong>${counts.pending}</strong></div><div class="status-pill"><span>ATRASADAS</span><strong class="negative">${counts.late}</strong></div><div class="status-pill"><span>REALIZADAS</span><strong class="positive">${counts.paid}</strong></div>`;
   const filtered = entries.filter(item => {
-    const status = entryStatus(state, item, selectedMonth);
+    const status = entryStatus(view, item, selectedMonth);
     return agendaFilter === 'all' || status === agendaFilter || (agendaFilter === 'pending' && status === 'soon');
   });
   $('#agendaList').innerHTML = filtered.length ? filtered.map(timelineItem).join('') : empty('Nenhum item com esse status.');
 }
 
 function renderPlan() {
+  const view = activeState();
   let accumulated = 0;
   const months = Array.from({ length: 12 }, (_, index) => {
     const date = addMonths(selectedMonth, index);
-    const totals = totalsForMonth(state, date);
+    const totals = totalsForMonth(view, date);
     const result = totals.plannedIncome - totals.plannedExpense;
     accumulated += result;
     return { date, totals, result, accumulated };
   });
   $('#twelveMonthResult').textContent = money(accumulated);
   $('#twelveMonthResult').className = `money ${accumulated >= 0 ? 'positive' : 'negative'}`;
-  const point = balancePoint(state, selectedMonth);
+  const point = balancePoint(view, selectedMonth);
   $('#balancePoint').textContent = point ? `Ponto de equilíbrio: ${monthName(point)}` : 'Ponto de equilíbrio não previsto em 12 meses';
   $('#forecastList').innerHTML = months.map(({ date, totals, result }) => `<article class="forecast-card"><span>${monthName(date)}</span><strong class="${result >= 0 ? 'positive' : 'negative'}">${money(result)}</strong><small>${money(totals.plannedIncome)} entra</small><small>${money(totals.plannedExpense)} sai</small></article>`).join('');
-  $('#goalList').innerHTML = state.goals.length ? state.goals.map(goal => {
+  $('#goalList').innerHTML = view.goals.length ? view.goals.map(goal => {
     const progress = Math.min(100, Number(goal.current || 0) / Math.max(Number(goal.target || 0), 1) * 100);
     return `<button class="goal-card" data-edit-goal="${escapeHtml(goal.id)}"><span>${escapeHtml(goal.name)}</span><small>${money(goal.current)} de ${money(goal.target)}</small><div class="progress"><i style="width:${progress}%"></i></div></button>`;
   }).join('') : empty('Crie uma meta para transformar sobra em progresso.');
 }
 
 function renderSettings() {
+  $('#memberManager').innerHTML = state.members.map(item => `<button class="manager-item" data-edit-member="${escapeHtml(item.id)}"><span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.role || 'Membro')} · ${item.active === false ? 'inativo' : 'ativo'}</small></span><b>›</b></button>`).join('');
   $('#incomeManager').innerHTML = state.incomes.length ? state.incomes.map(item => `<button class="manager-item" data-edit-income="${escapeHtml(item.id)}"><span><strong>${escapeHtml(item.name)}</strong><small>${item.schedule === 'second-business-day' ? '2º dia útil' : `Dia ${item.day}`} · ${item.active === false ? 'pausada' : 'ativa'}</small></span><b class="positive">${money(item.value)}</b></button>`).join('') : empty('Nenhuma renda cadastrada.');
   $('#commitmentManager').innerHTML = state.commitments.length ? state.commitments.map(item => `<button class="manager-item" data-edit-commitment="${escapeHtml(item.id)}"><span><strong>${escapeHtml(item.name)}</strong><small>${item.recurring ? 'Recorrente' : `${item.installments} parcelas`} · dia ${item.day}</small></span><b class="negative">${money(item.value)}</b></button>`).join('') : empty('Nenhuma conta cadastrada.');
   $('#debtManager').innerHTML = state.debts.length ? state.debts.map(item => `<button class="manager-item" data-edit-debt="${escapeHtml(item.id)}"><span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.status || 'Acompanhar')} · ${escapeHtml(item.strategy || 'Sem estratégia')}</small></span><b>${money(item.balance)}</b></button>`).join('') : empty('Nenhuma dívida cadastrada.');
@@ -152,6 +181,7 @@ function renderSettings() {
 
 function renderAll() {
   applyPreferences();
+  renderMemberFilter();
   renderHome();
   renderTransactions();
   renderAgenda();
@@ -214,7 +244,17 @@ function openEditor(type, existing = null, prefill = {}) {
       field('Parcela do acordo', 'monthly', 'number', existing?.monthly || 0, { min: 0, step: 0.01 }) +
       field('Dia da parcela', 'day', 'number', existing?.day || 1, { min: 1, max: 31 }) +
       field('Estratégia', 'strategy', 'text', existing?.strategy || '', { class: 'full', maxlength: 160 });
+  } else if (type === 'member') {
+    title = existing ? 'Editar membro' : 'Novo membro da família'; eyebrow = 'FAMÍLIA';
+    fields = field('Nome', 'name', 'text', existing?.name || '', { class: 'full', required: true, maxlength: 60 }) +
+      field('Papel na família', 'role', 'text', existing?.role || '', { class: 'full', maxlength: 80 }) +
+      select('Tipo', 'memberType', existing?.type || 'person', [['person', 'Pessoa'], ['household', 'Casa/compartilhado']]) +
+      select('Situação', 'active', String(existing?.active ?? true), [['true', 'Ativo'], ['false', 'Inativo']]);
+  } else if (type === 'household') {
+    title = 'Nome da família'; eyebrow = 'GRUPO FAMILIAR';
+    fields = field('Nome do grupo', 'name', 'text', state.household.name || 'Minha família', { class: 'full', required: true, maxlength: 60 });
   }
+  if (['transaction', 'commitment', 'income', 'goal', 'debt'].includes(type)) fields += select('Pertence a', 'memberId', existing?.memberId || prefill.memberId || (memberFilter === 'all' ? 'primary' : memberFilter), memberChoices(), true);
   $('#dialogTitle').textContent = title; $('#dialogEyebrow').textContent = eyebrow; $('#dialogFields').innerHTML = fields;
   $('#editorDialog').showModal();
 }
@@ -224,27 +264,34 @@ async function saveEditor(formData) {
   const { type, id, prefill } = dialogContext;
   if (type === 'transaction') {
     const previous = state.transactions.find(item => item.id === id);
-    const item = { ...previous, id: id || uid(), type: data.type, date: data.date, desc: data.desc.trim(), cat: data.cat, value: Number(data.value), ...prefill };
+    const item = stamp({ ...previous, id: id || uid(), type: data.type, date: data.date, desc: data.desc.trim(), cat: data.cat, value: Number(data.value), memberId: data.memberId, ...prefill });
     state.transactions = id ? state.transactions.map(entry => entry.id === id ? item : entry) : [...state.transactions, item];
   } else if (type === 'commitment') {
     const previous = state.commitments.find(item => item.id === id);
-    const item = { ...previous, id: id || uid(), name: data.name.trim(), kind: data.kind, value: Number(data.value), start: data.start, day: Number(data.day), recurring: data.recurring === 'true', installments: data.recurring === 'true' ? null : Number(data.installments), priority: data.priority, active: true };
+    const item = stamp({ ...previous, id: id || uid(), name: data.name.trim(), kind: data.kind, value: Number(data.value), start: data.start, day: Number(data.day), recurring: data.recurring === 'true', installments: data.recurring === 'true' ? null : Number(data.installments), priority: data.priority, memberId: data.memberId, active: true });
     state.commitments = id ? state.commitments.map(entry => entry.id === id ? item : entry) : [...state.commitments, item];
   } else if (type === 'income') {
     const previous = state.incomes.find(item => item.id === id);
-    const item = { ...previous, id: id || uid(), name: data.name.trim(), value: Number(data.value), schedule: data.schedule, day: Number(data.day), active: true };
+    const item = stamp({ ...previous, id: id || uid(), name: data.name.trim(), value: Number(data.value), schedule: data.schedule, day: Number(data.day), memberId: data.memberId, active: true });
     state.incomes = id ? state.incomes.map(entry => entry.id === id ? item : entry) : [...state.incomes, item];
   } else if (type === 'goal') {
     const previous = state.goals.find(item => item.id === id);
-    const item = { ...previous, id: id || uid(), name: data.name.trim(), target: Number(data.target), current: Number(data.current) };
+    const item = stamp({ ...previous, id: id || uid(), name: data.name.trim(), target: Number(data.target), current: Number(data.current), memberId: data.memberId });
     state.goals = id ? state.goals.map(entry => entry.id === id ? item : entry) : [...state.goals, item];
   } else if (type === 'balance') {
     const transactionSum = state.transactions.reduce((sum, item) => sum + (item.type === 'entrada' ? 1 : -1) * Number(item.value || 0), 0);
     state.initialBalance = Number(data.balance) - transactionSum;
   } else if (type === 'debt') {
     const previous = state.debts.find(item => item.id === id);
-    const item = { ...previous, id: id || uid(), name: data.name.trim(), balance: Number(data.balance), status: data.status, monthly: Number(data.monthly), day: Number(data.day), strategy: data.strategy.trim() };
+    const item = stamp({ ...previous, id: id || uid(), name: data.name.trim(), balance: Number(data.balance), status: data.status, monthly: Number(data.monthly), day: Number(data.day), strategy: data.strategy.trim(), memberId: data.memberId });
     state.debts = id ? state.debts.map(entry => entry.id === id ? item : entry) : [...state.debts, item];
+  } else if (type === 'member') {
+    const previous = state.members.find(item => item.id === id);
+    const protectedMember = ['primary', 'household'].includes(id);
+    const item = stamp({ ...previous, id: id || uid(), name: data.name.trim(), role: data.role.trim(), type: data.memberType, active: protectedMember ? true : data.active === 'true' });
+    state.members = id ? state.members.map(entry => entry.id === id ? item : entry) : [...state.members, item];
+  } else if (type === 'household') {
+    state.household = stamp({ ...state.household, name: data.name.trim() });
   }
   $('#editorDialog').close();
   await persist('Dados salvos com segurança.');
@@ -253,7 +300,7 @@ async function saveEditor(formData) {
 async function recordEntry(kind, id) {
   const entry = agendaEntries(state, selectedMonth).find(item => item.kind === kind && item.id === id);
   if (!entry) return;
-  state.transactions.push({ id: uid(), type: entry.isIncome ? 'entrada' : 'saida', date: entry.date, desc: entry.name, cat: entry.isIncome ? 'Salário' : entry.kind === 'debt' ? 'Dívida' : 'Outros', value: entry.value, linkType: entry.kind, linkId: entry.id, monthKey: monthKey(selectedMonth) });
+  state.transactions.push(stamp({ id: uid(), type: entry.isIncome ? 'entrada' : 'saida', date: entry.date, desc: entry.name, cat: entry.isIncome ? 'Salário' : entry.kind === 'debt' ? 'Dívida' : 'Outros', value: entry.value, memberId: entry.memberId || 'primary', linkType: entry.kind, linkId: entry.id, monthKey: monthKey(selectedMonth) }));
   await persist(entry.isIncome ? 'Recebimento registrado.' : 'Pagamento registrado.');
 }
 
@@ -261,9 +308,10 @@ function simulate() {
   const value = Number($('#simValue').value) || 0;
   const monthly = Number($('#simMonthly').value) || value;
   const months = Number($('#simMonths').value) || 1;
-  const totals = totalsForMonth(state, selectedMonth);
+  const view = activeState();
+  const totals = totalsForMonth(view, selectedMonth);
   const margin = totals.plannedIncome - totals.plannedExpense - monthly;
-  const safe = cashNow(state) - reservedUntilNextIncome(state) - value;
+  const safe = cashNow(view) - reservedUntilNextIncome(view) - value;
   let verdict = 'Compatível com seu fluxo'; let detail = `Após a parcela, sobrariam ${money(margin)} por mês.`; let tone = 'positive';
   if (margin < 0 || safe < 0) { verdict = 'Não recomendado agora'; detail = `A compra criaria um déficit de ${money(Math.abs(Math.min(margin, safe)))}.`; tone = 'negative'; }
   else if (margin < totals.plannedIncome * .1) { verdict = 'Cabe, mas com pouca margem'; detail = `A folga mensal cairia para ${money(margin)} durante ${months} meses.`; tone = ''; }
@@ -271,7 +319,44 @@ function simulate() {
   $('#simulationResult').innerHTML = `<strong class="${tone}">${verdict}</strong><p>${detail} O custo informado foi ${money(value)}.</p>`;
 }
 
+function downloadBackup(label = '') {
+  const url = URL.createObjectURL(new Blob([exportBackup(state)], { type: 'application/json' }));
+  const suffix = label ? `-${label}` : '';
+  const link = Object.assign(document.createElement('a'), { href: url, download: `meu-financeiro-familia${suffix}-${new Date().toISOString().slice(0, 10)}.json` });
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function exportSummaryImage() {
+  const view = activeState();
+  const totals = totalsForMonth(view, selectedMonth);
+  const canvas = document.createElement('canvas');
+  canvas.width = 1080; canvas.height = 1350;
+  const ctx = canvas.getContext('2d');
+  const rounded = (x, y, w, h, r, color) => { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fillStyle = color; ctx.fill(); };
+  const write = (text, x, y, size = 30, color = '#17201d', weight = 500, align = 'left') => { ctx.font = `${weight} ${size}px Arial`; ctx.fillStyle = color; ctx.textAlign = align; ctx.fillText(text, x, y); };
+  ctx.fillStyle = '#f5f5f2'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  rounded(42, 42, 996, 230, 36, '#0b4d3b');
+  write((state.household.name || 'Minha família').toUpperCase(), 82, 105, 22, '#a8d6c5', 700);
+  write('Resumo financeiro', 82, 163, 48, '#ffffff', 700);
+  write(monthName(selectedMonth), 82, 215, 25, '#cce7dc', 400);
+  const filterName = memberFilter === 'all' ? 'Visão consolidada' : `Visão: ${memberById(memberFilter).name}`;
+  write(filterName, 992, 215, 22, '#cce7dc', 400, 'right');
+  const kpis = [['Entradas', totals.plannedIncome, '#16764e'], ['Saídas', totals.plannedExpense, '#bd3e3e'], ['Resultado', totals.result, totals.result >= 0 ? '#16764e' : '#bd3e3e'], ['Saldo atual', cashNow(view), '#17201d']];
+  kpis.forEach(([label, value, color], index) => { const x = 42 + (index % 2) * 508, y = 306 + Math.floor(index / 2) * 154; rounded(x, y, 488, 132, 26, '#ffffff'); write(label, x + 28, y + 42, 21, '#68736e', 400); write(money(value), x + 28, y + 94, 34, color, 700); });
+  write('Participação da família', 50, 650, 32, '#17201d', 700);
+  let y = 690;
+  state.members.filter(item => item.active !== false).slice(0, 7).forEach(member => {
+    const memberState = stateForMember(state, member.id); const mt = totalsForMonth(memberState, selectedMonth); const debt = memberState.debts.reduce((sum, item) => sum + Number(item.balance || 0), 0);
+    rounded(42, y, 996, 82, 18, '#ffffff'); rounded(58, y + 16, 50, 50, 14, '#dff4eb'); write(member.name.slice(0, 1).toUpperCase(), 83, y + 51, 22, '#126e56', 700, 'center'); write(member.name, 128, y + 35, 23, '#17201d', 700); write(member.role || 'Membro', 128, y + 62, 16, '#68736e', 400); write(`Entra ${shortMoney(mt.plannedIncome)}`, 650, y + 35, 18, '#16764e', 700, 'right'); write(`Sai ${shortMoney(mt.plannedExpense)}  ·  Dívida ${shortMoney(debt)}`, 1008, y + 62, 16, '#68736e', 400, 'right'); y += 94;
+  });
+  write('Gerado no Meu Financeiro · dados privados e locais', 54, 1310, 17, '#68736e', 400);
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+  const url = URL.createObjectURL(blob); const link = Object.assign(document.createElement('a'), { href: url, download: `resumo-${(state.household.name || 'familia').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${monthKey(selectedMonth)}.png` }); link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); toast('Resumo em imagem gerado.');
+}
+
 document.addEventListener('click', async event => {
+  const dialogClose = event.target.closest('[data-dialog-close]'); if (dialogClose) { $('#editorDialog').close(); return; }
   const nav = event.target.closest('[data-nav]'); if (nav) go(nav.dataset.nav);
   const month = event.target.closest('[data-month]'); if (month) { selectedMonth = month.dataset.month === 'today' ? startOfMonth(new Date()) : addMonths(selectedMonth, Number(month.dataset.month)); renderAll(); }
   const opener = event.target.closest('[data-open]'); if (opener) openEditor(opener.dataset.open);
@@ -281,18 +366,28 @@ document.addEventListener('click', async event => {
   const editIncome = event.target.closest('[data-edit-income]'); if (editIncome) openEditor('income', state.incomes.find(item => item.id === editIncome.dataset.editIncome));
   const editCommitment = event.target.closest('[data-edit-commitment]'); if (editCommitment) openEditor('commitment', state.commitments.find(item => item.id === editCommitment.dataset.editCommitment));
   const editDebt = event.target.closest('[data-edit-debt]'); if (editDebt) openEditor('debt', state.debts.find(item => item.id === editDebt.dataset.editDebt));
+  const editMember = event.target.closest('[data-edit-member]'); if (editMember) openEditor('member', state.members.find(item => item.id === editMember.dataset.editMember));
   const agendaButton = event.target.closest('[data-agenda-filter]'); if (agendaButton) { agendaFilter = agendaButton.dataset.agendaFilter; $$('#agendaFilters button').forEach(item => item.classList.toggle('active', item === agendaButton)); renderAgenda(); }
 });
+
+$('.fab').addEventListener('pointerdown', event => {
+  const button = event.currentTarget;
+  button.classList.add('is-active');
+  setTimeout(() => button.classList.remove('is-active'), 1200);
+});
+$('#editorDialog').addEventListener('click', event => { if (event.target === event.currentTarget) event.currentTarget.close(); });
 
 $('#editorForm').addEventListener('submit', event => { event.preventDefault(); if (event.submitter?.value === 'cancel') { $('#editorDialog').close(); return; } if (event.currentTarget.reportValidity()) saveEditor(new FormData(event.currentTarget)); });
 $('#searchTransactions').addEventListener('input', renderTransactions);
 $('#transactionFilter').addEventListener('change', renderTransactions);
+$('#memberFilter').addEventListener('change', event => { memberFilter = event.target.value; renderAll(); });
 $('#simulateButton').addEventListener('click', simulate);
+$('#shareImageButton').addEventListener('click', exportSummaryImage);
 $('#themeToggle').addEventListener('click', async () => { state.preferences.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; await persist(); });
 $('#privacyToggle').addEventListener('click', async () => { state.preferences.privacy = !state.preferences.privacy; await persist(); });
-$('#exportButton').addEventListener('click', () => { const url = URL.createObjectURL(new Blob([exportBackup(state)], { type: 'application/json' })); const link = Object.assign(document.createElement('a'), { href: url, download: `meu-financeiro-${new Date().toISOString().slice(0, 10)}.json` }); link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); toast('Backup exportado.'); });
+$('#exportButton').addEventListener('click', () => { downloadBackup(); toast('Backup familiar exportado.'); });
 $('#importButton').addEventListener('click', () => $('#importFile').click());
-$('#importFile').addEventListener('change', async event => { try { const file = event.target.files[0]; if (!file) return; const imported = importBackup(await file.text()); if (!confirm('Substituir os dados atuais por este backup validado?')) return; state = imported; await persist('Backup restaurado.'); } catch (error) { toast(error.message || 'Não foi possível importar o backup.'); } finally { event.target.value = ''; } });
+$('#importFile').addEventListener('change', async event => { try { const file = event.target.files[0]; if (!file) return; const imported = importBackup(await file.text()); const merge = confirm('Deseja MESCLAR este backup com os dados atuais?\n\nOK = mesclar sem duplicar\nCancelar = escolher substituição completa'); if (merge) { state = mergeStates(state, imported); await persist('Backup mesclado com sucesso.'); return; } if (!confirm('Substituir todos os dados atuais? Um backup de segurança será baixado antes.')) return; downloadBackup('antes-de-restaurar'); state = imported; memberFilter = 'all'; await persist('Backup restaurado.'); } catch (error) { toast(error.message || 'Não foi possível importar o backup.'); } finally { event.target.value = ''; } });
 $('#resetButton').addEventListener('click', async () => { if (!confirm('Apagar todos os dados financeiros deste dispositivo? Esta ação não pode ser desfeita.')) return; if (!confirm('Confirma que deseja recomeçar com o app vazio?')) return; state = await clearState(); renderAll(); toast('Dados apagados.'); });
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {

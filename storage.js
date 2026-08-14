@@ -45,7 +45,13 @@ async function migrateLegacy() {
 
 export async function loadState() {
   const stored = await operation('readonly', store => store.get(STATE_KEY));
-  if (stored) return migrateState(stored);
+  if (stored) {
+    const migrated = migrateState(stored);
+    if (stored.version !== migrated.version || !Array.isArray(stored.members) || !stored.household) {
+      await operation('readwrite', store => store.put(migrated, STATE_KEY));
+    }
+    return migrated;
+  }
   return await migrateLegacy() || emptyState();
 }
 
@@ -61,7 +67,12 @@ export async function clearState() {
 }
 
 export function exportBackup(state) {
-  return JSON.stringify({ ...state, exportedAt: new Date().toISOString(), app: 'Meu Financeiro' }, null, 2);
+  return JSON.stringify({
+    ...migrateState(state),
+    backupVersion: 5,
+    exportedAt: new Date().toISOString(),
+    app: 'Meu Financeiro Família'
+  }, null, 2);
 }
 
 export function importBackup(text) {

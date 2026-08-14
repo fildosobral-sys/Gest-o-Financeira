@@ -1,7 +1,12 @@
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const emptyState = () => ({
   version: SCHEMA_VERSION,
+  household: { id: uid(), name: 'Minha família', updatedAt: new Date().toISOString() },
+  members: [
+    { id: 'primary', name: 'Eu', role: 'Responsável principal', type: 'person', active: true, updatedAt: new Date().toISOString() },
+    { id: 'household', name: 'Casa', role: 'Despesas compartilhadas', type: 'household', active: true, updatedAt: new Date().toISOString() }
+  ],
   initialBalance: 0,
   incomes: [],
   commitments: [],
@@ -45,7 +50,7 @@ export function incomeOccurrence(income, date, holidays = []) {
   const occurrenceDate = income.schedule === 'second-business-day'
     ? secondBusinessDay(year, month, holidays)
     : isoDate(year, month, income.day);
-  return { kind: 'income', id: income.id, name: income.name, value: Number(income.value) || 0, date: occurrenceDate, isIncome: true };
+  return { kind: 'income', id: income.id, name: income.name, value: Number(income.value) || 0, date: occurrenceDate, isIncome: true, memberId: income.memberId || 'primary' };
 }
 
 export function occurrenceForCommit(commitment, date) {
@@ -61,7 +66,7 @@ export function occurrenceForCommit(commitment, date) {
     kind: 'commitment', id: commitment.id, name: commitment.name,
     value: Number(commitment.value) || 0,
     date: isoDate(date.getFullYear(), date.getMonth(), commitment.day || localDate(commitment.start).getDate()),
-    isIncome: false, installmentNo, total, commitment
+    isIncome: false, installmentNo, total, commitment, memberId: commitment.memberId || 'primary'
   };
 }
 
@@ -69,8 +74,16 @@ export function migrateState(raw) {
   if (!raw || typeof raw !== 'object') return emptyState();
   const base = emptyState();
   const state = { ...base, ...raw, preferences: { ...base.preferences, ...(raw.preferences || {}) } };
+  state.household = raw.household && typeof raw.household === 'object' ? { ...base.household, ...raw.household } : base.household;
+  state.members = Array.isArray(raw.members) && raw.members.length
+    ? raw.members
+    : base.members.map(item => ({ ...item, updatedAt: '1970-01-01T00:00:00.000Z' }));
+  state.members = state.members.map(item => ({ ...item, active: item.active !== false, updatedAt: item.updatedAt || '1970-01-01T00:00:00.000Z' }));
+  if (!state.members.some(item => item.id === 'primary')) state.members.unshift(base.members[0]);
+  if (!state.members.some(item => item.id === 'household')) state.members.push(base.members[1]);
   for (const key of ['incomes', 'commitments', 'debts', 'extras', 'goals', 'transactions']) {
     state[key] = Array.isArray(raw[key]) ? raw[key] : [];
+    state[key] = state[key].map(item => ({ ...item, memberId: item.memberId || 'primary', updatedAt: item.updatedAt || '1970-01-01T00:00:00.000Z' }));
   }
   state.commitments = state.commitments.map(item => ({
     ...item,
@@ -85,7 +98,7 @@ export function migrateState(raw) {
 
 export function validateBackup(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('O backup não contém um objeto válido.');
-  const collections = ['incomes', 'commitments', 'debts', 'extras', 'goals', 'transactions'];
+  const collections = ['members', 'incomes', 'commitments', 'debts', 'extras', 'goals', 'transactions'];
   if (!collections.some(key => Array.isArray(raw[key]))) throw new Error('O arquivo não parece ser um backup do Meu Financeiro.');
   for (const key of collections) if (raw[key] != null && !Array.isArray(raw[key])) throw new Error(`Campo inválido: ${key}.`);
   const state = migrateState(raw);
@@ -100,10 +113,40 @@ export const linkedTransaction = (state, kind, id, date) => state.transactions.f
 export function agendaEntries(state, date, holidays = []) {
   const entries = [];
   state.incomes.forEach(item => { const occurrence = incomeOccurrence(item, date, holidays); if (occurrence) entries.push(occurrence); });
-  state.extras.filter(item => item.active !== false && String(item.date).startsWith(monthKey(date))).forEach(item => entries.push({ kind: 'extra', id: item.id, name: item.name, value: Number(item.value) || 0, date: item.date, isIncome: true }));
+  state.extras.filter(item => item.active !== false && String(item.date).startsWith(monthKey(date))).forEach(item => entries.push({ kind: 'extra', id: item.id, name: item.name, value: Number(item.value) || 0, date: item.date, isIncome: true, memberId: item.memberId || 'primary' }));
   state.commitments.forEach(item => { const occurrence = occurrenceForCommit(item, date); if (occurrence) entries.push(occurrence); });
-  state.debts.filter(item => Number(item.monthly) > 0).forEach(item => entries.push({ kind: 'debt', id: item.id, name: `Acordo: ${item.name}`, value: Number(item.monthly), date: isoDate(date.getFullYear(), date.getMonth(), item.day), isIncome: false }));
+  state.debts.filter(item => Number(item.monthly) > 0).forEach(item => entries.push({ kind: 'debt', id: item.id, name: `Acordo: ${item.name}`, value: Number(item.monthly), date: isoDate(date.getFullYear(), date.getMonth(), item.day), isIncome: false, memberId: item.memberId || 'primary' }));
   return entries.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export function stateForMember(state, memberId = 'all') {
+  if (!memberId || memberId === 'all') return state;
+  const filtered = { ...state, initialBalance: memberId === 'primary' ? Number(state.initialBalance || 0) : 0 };
+  for (const key of ['incomes', 'commitments', 'debts', 'extras', 'goals', 'transactions']) {
+    filtered[key] = state[key].filter(item => (item.memberId || 'primary') === memberId);
+  }
+  return filtered;
+}
+
+export function mergeStates(currentRaw, incomingRaw) {
+  const current = migrateState(currentRaw);
+  const incoming = migrateState(incomingRaw);
+  const mergeCollection = (left, right) => {
+    const records = new Map(left.map(item => [item.id, item]));
+    right.forEach(item => {
+      const existing = records.get(item.id);
+      if (!existing || String(item.updatedAt || '') >= String(existing.updatedAt || '')) records.set(item.id, item);
+    });
+    return [...records.values()].filter(item => !item.deletedAt);
+  };
+  const sameHousehold = incoming.household?.id === current.household?.id;
+  const incomingHouseholdIsNewer = String(incoming.household?.updatedAt || '') >= String(current.household?.updatedAt || '');
+  const merged = {
+    ...current,
+    household: sameHousehold && incomingHouseholdIsNewer ? { ...current.household, ...incoming.household } : current.household
+  };
+  for (const key of ['members', 'incomes', 'commitments', 'debts', 'extras', 'goals', 'transactions']) merged[key] = mergeCollection(current[key], incoming[key]);
+  return migrateState(merged);
 }
 
 export function entryStatus(state, entry, selectedMonth, today = new Date()) {

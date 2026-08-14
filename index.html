@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="managers.css">
   <link rel="stylesheet" href="ui-fixes.css">
+  <link rel="stylesheet" href="family.css">
   <title>Meu Financeiro</title>
 </head>
 <body>
@@ -34,6 +35,7 @@
           <button class="month-label" id="monthLabel" data-month="today"></button>
           <button class="icon-button" data-month="1" aria-label="Próximo mês">›</button>
         </div>
+        <div class="family-toolbar"><label><span>Visualizar</span><select id="memberFilter" aria-label="Filtrar por membro"></select></label><button class="secondary-button" id="shareImageButton">Baixar resumo</button></div>
 
         <article class="hero-card">
           <div class="hero-copy">
@@ -56,6 +58,9 @@
           <article class="metric"><span>A receber</span><strong class="money positive" id="pendingIncome">R$ 0,00</strong></article>
           <article class="metric"><span>A pagar</span><strong class="money negative" id="pendingExpense">R$ 0,00</strong></article>
         </div>
+
+        <div class="section-heading"><div><span class="overline">FAMÍLIA</span><h2>Participação no mês</h2></div></div>
+        <div class="family-overview" id="familyOverview"></div>
 
         <div class="section-heading"><div><span class="overline">AGORA</span><h2>Próximos compromissos</h2></div><button class="text-button" data-nav="agenda">Ver agenda</button></div>
         <div class="timeline" id="nextItems"></div>
@@ -95,15 +100,17 @@
       <section class="view" data-view="settings">
         <div class="section-heading"><div><span class="overline">PREFERÊNCIAS</span><h2>Seu controle</h2></div></div>
         <div class="settings-list">
+          <button data-open="household"><span><strong>Nome da família</strong><small>Personalize o grupo familiar</small></span><b>›</b></button>
           <button data-open="balance"><span><strong>Ajustar saldo</strong><small>Informe quanto você tem hoje</small></span><b>›</b></button>
           <button data-open="income"><span><strong>Fontes de renda</strong><small>Salário, benefício e renda extra</small></span><b>›</b></button>
           <button data-open="commitment"><span><strong>Contas e parcelas</strong><small>Cadastre recorrências e parcelamentos</small></span><b>›</b></button>
           <button data-open="debt"><span><strong>Dívidas e acordos</strong><small>Acompanhe saldo e estratégia de quitação</small></span><b>›</b></button>
-          <button id="exportButton"><span><strong>Exportar backup</strong><small>Baixe uma cópia dos seus dados</small></span><b>↓</b></button>
+          <button id="exportButton"><span><strong>Exportar backup</strong><small>Compartilhe uma fotografia completa dos dados</small></span><b>↓</b></button>
           <button id="importButton"><span><strong>Importar backup</strong><small>Restaure um arquivo validado</small></span><b>↑</b></button>
           <input id="importFile" type="file" accept="application/json" hidden>
           <button id="resetButton" class="danger-row"><span><strong>Apagar todos os dados</strong><small>Recomece com um controle vazio</small></span><b>×</b></button>
         </div>
+        <div class="section-heading"><h2>Membros da família</h2><button class="text-button" data-open="member">+ Adicionar</button></div><div class="manager-list" id="memberManager"></div>
         <div class="section-heading"><h2>Fontes de renda</h2></div><div class="manager-list" id="incomeManager"></div>
         <div class="section-heading"><h2>Contas e parcelas</h2></div><div class="manager-list" id="commitmentManager"></div>
         <div class="section-heading"><h2>Dívidas e acordos</h2></div><div class="manager-list" id="debtManager"></div>
@@ -121,7 +128,7 @@
     <button data-nav="settings"><span>•••</span>Mais</button>
   </nav>
 
-  <dialog id="editorDialog"><form method="dialog" id="editorForm"><div class="dialog-head"><div><span class="overline" id="dialogEyebrow">NOVO</span><h2 id="dialogTitle">Adicionar</h2></div><button class="icon-button" value="cancel" aria-label="Fechar">×</button></div><div id="dialogFields" class="form-grid"></div><div class="dialog-actions"><button class="secondary-button" value="cancel">Cancelar</button><button class="primary-button" id="dialogSave" value="default">Salvar</button></div></form></dialog>
+  <dialog id="editorDialog"><form method="dialog" id="editorForm"><div class="dialog-head"><div><span class="overline" id="dialogEyebrow">NOVO</span><h2 id="dialogTitle">Adicionar</h2></div><button type="button" class="icon-button" data-dialog-close aria-label="Fechar">×</button></div><div id="dialogFields" class="form-grid"></div><div class="dialog-actions"><button type="button" class="secondary-button" data-dialog-close>Cancelar</button><button type="submit" class="primary-button" id="dialogSave" value="default">Salvar</button></div></form></dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <div class="update-banner" id="updateBanner" hidden role="status">
     <span><strong>Atualização pronta</strong><small>Leva só alguns segundos.</small></span>
