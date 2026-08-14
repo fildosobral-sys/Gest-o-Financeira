@@ -62,12 +62,12 @@
         <div class="section-heading"><div><span class="overline">SEU MÊS</span><h2>Raio-x financeiro</h2></div></div>
         <div class="metric-grid">
           <article class="metric"><span>🏦 Saldo nas contas</span><strong class="money" id="cashNow">R$ 0,00</strong></article>
-          <article class="metric"><span>🔒 Já comprometido</span><strong class="money negative" id="committedNow">R$ 0,00</strong></article>
-          <article class="metric"><span>🟢 Entradas do mês</span><strong class="money positive" id="monthIncome">R$ 0,00</strong></article>
-          <article class="metric"><span>🔴 Saídas do mês</span><strong class="money negative" id="monthExpense">R$ 0,00</strong></article>
+          <article class="metric"><span>🟠 A pagar no mês</span><strong class="money negative" id="committedNow">R$ 0,00</strong></article>
+          <article class="metric"><span>🟢 Recebido no mês</span><strong class="money positive" id="monthIncome">R$ 0,00</strong></article>
+          <article class="metric"><span>🔴 Pago no mês</span><strong class="money negative" id="monthExpense">R$ 0,00</strong></article>
           <article class="metric"><span>📉 Projeção do mês</span><strong class="money" id="monthResult">R$ 0,00</strong></article>
           <article class="metric"><span>💳 Dívidas em aberto</span><strong class="money negative" id="debtOpen">R$ 0,00</strong></article>
-          <article class="metric"><span>🟡 Esperado, não disponível</span><strong class="money" id="pendingIncome">R$ 0,00</strong></article>
+          <article class="metric"><span>🟡 A receber no mês</span><strong class="money positive" id="pendingIncome">R$ 0,00</strong></article>
           <article class="metric"><span>🛟 Reserva até receber</span><strong class="money" id="reserveNow">R$ 0,00</strong></article>
           <strong id="pendingExpense" hidden>R$ 0,00</strong>
         </div>
@@ -75,8 +75,8 @@
         <div class="section-heading"><div><span class="overline">FAMÍLIA</span><h2>Participação no mês</h2></div></div>
         <div class="family-overview" id="familyOverview"></div>
 
-        <div class="section-heading"><div><span class="overline">AGORA</span><h2>Próximos compromissos</h2></div><button class="text-button" data-nav="agenda">Ver agenda</button></div>
-        <div class="timeline" id="nextItems"></div>
+        <div class="section-heading"><div><span class="overline">MOVIMENTOS DO MÊS</span><h2>Receber e pagar</h2></div><button class="text-button" data-nav="agenda">Ver agenda</button></div>
+        <div class="cashflow-groups" id="nextItems"></div>
 
         <div class="section-heading"><div><span class="overline">RITMO</span><h2>Previsto x realizado</h2></div></div>
         <article class="card comparison-card">
@@ -100,10 +100,10 @@
       <section class="view" data-view="agenda">
         <div class="section-heading"><div><span class="overline">CONTROLE</span><h2>Agenda financeira</h2></div><button class="primary-button" data-open="commitment">+ Conta</button></div>
         <div class="month-switcher compact"><button class="icon-button" data-month="-1">‹</button><strong id="agendaMonthLabel"></strong><button class="icon-button" data-month="1">›</button></div>
-        <div class="status-strip" id="agendaStats"></div>
+        <div class="agenda-cashflow-stats" id="agendaStats"></div>
         <div id="agendaDebtPlan"></div>
-        <div class="segmented" id="agendaFilters"><button class="active" data-agenda-filter="pending">Pendentes</button><button data-agenda-filter="late">Atrasadas</button><button data-agenda-filter="paid">Pagas</button><button data-agenda-filter="all">Todas</button></div>
-        <div class="timeline" id="agendaList"></div>
+        <div class="segmented" id="agendaFilters"><button class="active" data-agenda-filter="pending">Em aberto</button><button data-agenda-filter="late">Atrasados</button><button data-agenda-filter="paid">Realizados</button><button data-agenda-filter="all">Todos</button></div>
+        <div class="cashflow-groups" id="agendaList"></div>
       </section>
 
       <section class="view" data-view="plan">

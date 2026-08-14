@@ -60,7 +60,7 @@ function renderHome() {
   $('#agendaMonthLabel').textContent = monthName(selectedMonth);
   $('#safeToSpend').textContent = money(safe);
   $('#cashNow').textContent = money(currentCash);
-  $('#committedNow').textContent = money(reserve);
+  $('#committedNow').textContent = money(totals.pendingExpense);
   $('#monthIncome').textContent = money(totals.realizedIncome);
   $('#monthExpense').textContent = money(totals.realizedExpense);
   $('#debtOpen').textContent = money(view.debts.reduce((sum, item) => sum + Number(item.balance || 0), 0));
@@ -78,10 +78,8 @@ function renderHome() {
 
   renderFamilyOverview();
   renderExtraIncomeOverview(view);
-  const entries = agendaEntries(view, selectedMonth)
-    .filter(item => entryStatus(view, item, selectedMonth) !== 'paid')
-    .slice(0, 4);
-  $('#nextItems').innerHTML = entries.length ? entries.map(timelineItem).join('') : empty('Nada pendente neste mês.');
+  const entries = agendaEntries(view, selectedMonth);
+  $('#nextItems').innerHTML = cashflowGroups(view, entries, { limit: 4, emptyMessage: 'Nenhum lançamento neste mês.' });
 
   $('#incomeComparison').textContent = `${shortMoney(totals.realizedIncome)} / ${shortMoney(totals.plannedIncome)}`;
   $('#expenseComparison').textContent = `${shortMoney(totals.realizedExpense)} / ${shortMoney(totals.plannedExpense)}`;
@@ -157,13 +155,45 @@ function timelineItem(item) {
   const member = memberById(payment?.memberId || item.memberId);
   const displayedDate = payment?.date || item.date;
   const displayedValue = payment ? Number(payment.value) : Number(item.value);
+  const statusText = paid
+    ? (item.isIncome ? 'Recebido' : 'Pago')
+    : status === 'late'
+      ? (item.isIncome ? 'Recebimento atrasado' : 'Pagamento atrasado')
+      : status === 'soon'
+        ? (item.isIncome ? 'Receber em breve' : 'Vence em breve')
+        : (item.isIncome ? 'A receber' : 'A pagar');
   return `<article class="timeline-item">
     <div class="date-tile"><strong>${localDate(displayedDate).getDate()}</strong><span>${shortMonth(localDate(displayedDate))}</span></div>
     <i class="status-dot ${status}"></i>
-    <div class="item-copy"><strong>${escapeHtml(item.name)}${item.installmentNo ? ` · ${item.installmentNo}/${item.total}` : ''}</strong><span>${paid ? 'Realizado' : status === 'late' ? 'Atrasado' : status === 'soon' ? 'Vence em breve' : 'Previsto'}</span><span class="timeline-member">${escapeHtml(member.name)}</span></div>
+    <div class="item-copy"><strong>${escapeHtml(item.name)}${item.installmentNo ? ` · ${item.installmentNo}/${item.total}` : ''}</strong><span>${statusText}</span><span class="timeline-member">${escapeHtml(member.name)}</span></div>
     <div class="item-amount ${item.isIncome ? 'positive' : 'negative'}">${item.isIncome ? '+' : '−'} ${money(displayedValue)}</div>
-    ${paid ? `<button class="icon-button paid-action" data-edit-paid="${escapeHtml(payment?.id || '')}" title="Corrigir ou desfazer" aria-label="Corrigir ou desfazer ${escapeHtml(item.name)}">↺</button>` : `<button class="icon-button" data-record="${escapeHtml(item.kind)}|${escapeHtml(item.id)}" title="Marcar como realizado" aria-label="Marcar ${escapeHtml(item.name)} como realizado">✓</button>`}
+    ${paid ? `<button class="icon-button paid-action" data-edit-paid="${escapeHtml(payment?.id || '')}" title="Corrigir ou desfazer" aria-label="Corrigir ou desfazer ${escapeHtml(item.name)}">↺</button>` : `<button class="icon-button" data-record="${escapeHtml(item.kind)}|${escapeHtml(item.id)}" title="${item.isIncome ? 'Marcar como recebido' : 'Marcar como pago'}" aria-label="${item.isIncome ? 'Marcar recebimento' : 'Marcar pagamento'} de ${escapeHtml(item.name)}">✓</button>`}
   </article>`;
+}
+
+function cashflowGroup(view, entries, isIncome, options = {}) {
+  const typeEntries = entries.filter(item => Boolean(item.isIncome) === isIncome);
+  const ordered = [...typeEntries].sort((left, right) => {
+    const rank = { late: 0, soon: 1, pending: 2, paid: 3 };
+    return (rank[entryStatus(view, left, selectedMonth)] ?? 9) - (rank[entryStatus(view, right, selectedMonth)] ?? 9) || left.date.localeCompare(right.date);
+  });
+  const visible = Number(options.limit) > 0 ? ordered.slice(0, Number(options.limit)) : ordered;
+  const planned = typeEntries.reduce((sum, item) => sum + Number(item.value || 0), 0);
+  const paidItems = typeEntries.filter(item => entryStatus(view, item, selectedMonth) === 'paid');
+  const realized = paidItems.reduce((sum, item) => {
+    const payment = view.transactions.find(tx => tx.linkType === item.kind && tx.linkId === item.id && tx.monthKey === monthKey(selectedMonth));
+    return sum + Number(payment?.value ?? item.value ?? 0);
+  }, 0);
+  const open = typeEntries.filter(item => entryStatus(view, item, selectedMonth) !== 'paid');
+  const late = open.filter(item => entryStatus(view, item, selectedMonth) === 'late').length;
+  const title = isIncome ? 'A receber' : 'A pagar';
+  const icon = isIncome ? '🟢' : '🔴';
+  const summary = `${open.length} em aberto${late ? ` · ${late} atrasado${late === 1 ? '' : 's'}` : ''} · ${paidItems.length} realizado${paidItems.length === 1 ? '' : 's'}`;
+  return `<section class="cashflow-group ${isIncome ? 'receivable' : 'payable'}"><header><div><span>${icon} ${title}</span><small>${summary}</small></div><div><strong>${money(planned)}</strong><small>${money(realized)} realizado</small></div></header><div class="timeline">${visible.length ? visible.map(timelineItem).join('') : empty(options.emptyMessage || `Nada ${isIncome ? 'a receber' : 'a pagar'} neste filtro.`)}</div>${visible.length < ordered.length ? `<button class="text-button cashflow-more" data-nav="agenda">Ver mais ${ordered.length - visible.length}</button>` : ''}</section>`;
+}
+
+function cashflowGroups(view, entries, options = {}) {
+  return cashflowGroup(view, entries, true, options) + cashflowGroup(view, entries, false, options);
 }
 
 function renderTransactions() {
@@ -185,9 +215,15 @@ function renderTransactions() {
 function renderAgenda() {
   const view = activeState();
   const entries = agendaEntries(view, selectedMonth);
-  const counts = { pending: 0, late: 0, paid: 0 };
-  entries.forEach(item => { const status = entryStatus(view, item, selectedMonth); counts[status === 'soon' ? 'pending' : status] += 1; });
-  $('#agendaStats').innerHTML = `<div class="status-pill"><span>PENDENTES</span><strong>${counts.pending}</strong></div><div class="status-pill"><span>ATRASADAS</span><strong class="negative">${counts.late}</strong></div><div class="status-pill"><span>REALIZADAS</span><strong class="positive">${counts.paid}</strong></div>`;
+  const statsCard = isIncome => {
+    const typed = entries.filter(item => Boolean(item.isIncome) === isIncome);
+    const open = typed.filter(item => !['paid', 'late'].includes(entryStatus(view, item, selectedMonth))).length;
+    const late = typed.filter(item => entryStatus(view, item, selectedMonth) === 'late').length;
+    const paid = typed.filter(item => entryStatus(view, item, selectedMonth) === 'paid').length;
+    const total = typed.reduce((sum, item) => sum + Number(item.value || 0), 0);
+    return `<article class="agenda-flow-stat ${isIncome ? 'receivable' : 'payable'}"><header><span>${isIncome ? '🟢 A RECEBER' : '🔴 A PAGAR'}</span><strong>${money(total)}</strong></header><div><span>Em aberto<b>${open}</b></span><span>Atrasados<b class="${late ? 'negative' : ''}">${late}</b></span><span>Realizados<b class="positive">${paid}</b></span></div></article>`;
+  };
+  $('#agendaStats').innerHTML = statsCard(true) + statsCard(false);
   const plannedDebts = view.debts.filter(item => Number(item.balance) > 0 && (item.paymentMode === 'planned' || Number(item.monthly) <= 0));
   const plannedTotal = plannedDebts.reduce((sum, item) => sum + Number(item.balance || 0), 0);
   $('#agendaDebtPlan').innerHTML = plannedDebts.length ? `<article class="agenda-debt-plan"><div><strong>🧭 ${plannedDebts.length} ${plannedDebts.length === 1 ? 'dívida para planejar' : 'dívidas para planejar'} · ${money(plannedTotal)}</strong><small>Visível para planejamento, sem descontar do seu mês.</small></div><button data-nav="plan">Ver dívidas</button></article>` : `<article class="agenda-debt-plan"><div><strong>🤝 Deve para alguém, mas ainda não paga mensalmente?</strong><small>Cadastre como dívida para planejar, sem comprometer a renda mensal.</small></div><button data-open="debt">+ Dívida</button></article>`;
@@ -195,7 +231,7 @@ function renderAgenda() {
     const status = entryStatus(view, item, selectedMonth);
     return agendaFilter === 'all' || status === agendaFilter || (agendaFilter === 'pending' && status === 'soon');
   });
-  $('#agendaList').innerHTML = filtered.length ? filtered.map(timelineItem).join('') : empty('Nenhum item com esse status.');
+  $('#agendaList').innerHTML = cashflowGroups(view, filtered, { emptyMessage: 'Nenhum item com esse status.' });
 }
 
 function renderPlan() {
