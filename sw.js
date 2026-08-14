@@ -1,5 +1,5 @@
-const CACHE = 'meu-financeiro-v5-familia-20260814';
-const ASSETS = ['./', './index.html', './styles.css', './managers.css', './ui-fixes.css', './family.css', './manifest.json', './app.js', './domain.js', './storage.js', './icon-180.png', './icon-192.png', './icon-512.png'];
+const CACHE = 'meu-financeiro-v5-extras-20260814';
+const ASSETS = ['./', './index.html', './styles.css', './managers.css', './ui-fixes.css', './family.css', './decision.css', './manifest.json', './app.js', './domain.js', './storage.js', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)));

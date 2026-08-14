@@ -112,10 +112,16 @@ export const linkedTransaction = (state, kind, id, date) => state.transactions.f
 
 export function agendaEntries(state, date, holidays = []) {
   const entries = [];
-  state.incomes.forEach(item => { const occurrence = incomeOccurrence(item, date, holidays); if (occurrence) entries.push(occurrence); });
-  state.extras.filter(item => item.active !== false && String(item.date).startsWith(monthKey(date))).forEach(item => entries.push({ kind: 'extra', id: item.id, name: item.name, value: Number(item.value) || 0, date: item.date, isIncome: true, memberId: item.memberId || 'primary' }));
+  const monthExtras = state.extras.filter(item => item.active !== false && String(item.date).startsWith(monthKey(date)));
+  const selectedKey = monthKey(date);
+  const replacedIncomeIds = new Set(state.extras.filter(item => item.active !== false && item.type === 'vacation' && item.replaceIncomeId && item.vacationStart && monthKey(localDate(item.vacationStart)) <= selectedKey && monthKey(localDate(item.vacationEnd || item.vacationStart)) >= selectedKey).map(item => item.replaceIncomeId));
+  state.incomes.filter(item => !replacedIncomeIds.has(item.id)).forEach(item => { const occurrence = incomeOccurrence(item, date, holidays); if (occurrence) entries.push(occurrence); });
+  monthExtras.forEach(item => entries.push({ kind: 'extra', id: item.id, name: item.name, value: Number(item.value) || 0, date: item.date, isIncome: true, memberId: item.memberId || 'primary', extraType: item.type || 'other', confidence: item.confidence || 'expected' }));
   state.commitments.forEach(item => { const occurrence = occurrenceForCommit(item, date); if (occurrence) entries.push(occurrence); });
-  state.debts.filter(item => Number(item.monthly) > 0).forEach(item => entries.push({ kind: 'debt', id: item.id, name: `Acordo: ${item.name}`, value: Number(item.monthly), date: isoDate(date.getFullYear(), date.getMonth(), item.day), isIncome: false, memberId: item.memberId || 'primary' }));
+  state.debts.filter(item => {
+    if (Number(item.monthly) <= 0 || Number(item.balance) <= 0) return false;
+    return !item.start || monthDistance(startOfMonth(localDate(item.start)), startOfMonth(date)) >= 0;
+  }).forEach(item => entries.push({ kind: 'debt', id: item.id, name: `Acordo: ${item.name}`, value: Number(item.monthly), date: isoDate(date.getFullYear(), date.getMonth(), item.day), isIncome: false, memberId: item.memberId || 'primary' }));
   return entries.sort((a, b) => a.date.localeCompare(b.date));
 }
 
@@ -180,9 +186,8 @@ export function nextIncomeDate(state, today = new Date()) {
   const candidates = [];
   for (let offset = 0; offset <= 2; offset += 1) {
     const month = addMonths(today, offset);
-    state.incomes.forEach(income => {
-      const occurrence = incomeOccurrence(income, month);
-      if (occurrence && localDate(occurrence.date) > localDate(today)) candidates.push(localDate(occurrence.date));
+    agendaEntries(state, month).filter(item => item.isIncome).forEach(item => {
+      if (localDate(item.date) > localDate(today)) candidates.push(localDate(item.date));
     });
   }
   return candidates.sort((a, b) => a - b)[0] || null;

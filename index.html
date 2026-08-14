@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="managers.css">
   <link rel="stylesheet" href="ui-fixes.css">
   <link rel="stylesheet" href="family.css">
+  <link rel="stylesheet" href="decision.css">
   <title>Meu Financeiro</title>
 </head>
 <body>
@@ -39,12 +40,16 @@
 
         <article class="hero-card">
           <div class="hero-copy">
-            <span class="overline">Disponível de verdade</span>
+            <span class="overline">🔥 SEU DINHEIRO HOJE</span>
             <strong class="money money-xl" id="safeToSpend">R$ 0,00</strong>
             <p id="safeHint">Depois de reservar as contas até a próxima renda.</p>
           </div>
           <div class="health-ring" id="healthRing" aria-label="Saúde financeira"><span id="healthScore">0</span><small>/100</small></div>
         </article>
+
+        <div class="health-thermometer" id="healthThermometer" aria-label="Termômetro financeiro">
+          <span data-health="critical">🔴 Crítico</span><span data-health="attention">🟠 Atenção</span><span data-health="balance">🟡 Equilíbrio</span><span data-health="positive">🟢 Positivo</span>
+        </div>
 
         <div class="insight-card" id="primaryInsight">
           <span class="insight-icon">✦</span>
@@ -53,10 +58,15 @@
 
         <div class="section-heading"><div><span class="overline">SEU MÊS</span><h2>Raio-x financeiro</h2></div></div>
         <div class="metric-grid">
-          <article class="metric"><span>Saldo atual</span><strong class="money" id="cashNow">R$ 0,00</strong></article>
-          <article class="metric"><span>Resultado previsto</span><strong class="money" id="monthResult">R$ 0,00</strong></article>
-          <article class="metric"><span>A receber</span><strong class="money positive" id="pendingIncome">R$ 0,00</strong></article>
-          <article class="metric"><span>A pagar</span><strong class="money negative" id="pendingExpense">R$ 0,00</strong></article>
+          <article class="metric"><span>🏦 Saldo nas contas</span><strong class="money" id="cashNow">R$ 0,00</strong></article>
+          <article class="metric"><span>🔒 Já comprometido</span><strong class="money negative" id="committedNow">R$ 0,00</strong></article>
+          <article class="metric"><span>🟢 Entradas do mês</span><strong class="money positive" id="monthIncome">R$ 0,00</strong></article>
+          <article class="metric"><span>🔴 Saídas do mês</span><strong class="money negative" id="monthExpense">R$ 0,00</strong></article>
+          <article class="metric"><span>📉 Projeção do mês</span><strong class="money" id="monthResult">R$ 0,00</strong></article>
+          <article class="metric"><span>💳 Dívidas em aberto</span><strong class="money negative" id="debtOpen">R$ 0,00</strong></article>
+          <article class="metric"><span>🟡 Esperado, não disponível</span><strong class="money" id="pendingIncome">R$ 0,00</strong></article>
+          <article class="metric"><span>🛟 Reserva até receber</span><strong class="money" id="reserveNow">R$ 0,00</strong></article>
+          <strong id="pendingExpense" hidden>R$ 0,00</strong>
         </div>
 
         <div class="section-heading"><div><span class="overline">FAMÍLIA</span><h2>Participação no mês</h2></div></div>
@@ -70,6 +80,12 @@
           <div class="comparison-row"><span>Entradas</span><div class="bar"><i id="incomeBar"></i></div><strong id="incomeComparison">R$ 0 / R$ 0</strong></div>
           <div class="comparison-row"><span>Saídas</span><div class="bar"><i class="expense" id="expenseBar"></i></div><strong id="expenseComparison">R$ 0 / R$ 0</strong></div>
         </article>
+
+        <div class="section-heading"><div><span class="overline">📅 FLUXO EM TEMPO REAL</span><h2>Até o próximo recebimento</h2></div></div>
+        <div class="live-flow" id="liveFlow"></div>
+        <div class="receipt-windows" id="receiptWindows"></div>
+        <div class="section-heading"><div><span class="overline">✨ RENDAS EXTRAORDINÁRIAS</span><h2>Valores fora da rotina</h2></div><button class="text-button" data-open="extra">+ Adicionar</button></div>
+        <div class="extra-income-overview" id="extraIncomeOverview"></div>
       </section>
 
       <section class="view" data-view="moves">
@@ -87,14 +103,22 @@
       </section>
 
       <section class="view" data-view="plan">
+        <div class="section-heading"><div><span class="overline">💳 CENTRAL DE DÍVIDAS</span><h2>Mapa de quitação</h2></div><button class="text-button" data-open="debt">+ Dívida</button></div>
+        <div class="debt-center" id="debtCenter"></div>
         <div class="section-heading"><div><span class="overline">FUTURO</span><h2>Planejamento</h2></div></div>
         <article class="card runway"><span>Projeção em 12 meses</span><strong class="money" id="twelveMonthResult">R$ 0,00</strong><p id="balancePoint">Ponto de equilíbrio: —</p></article>
         <div class="section-heading"><h2>Fluxo mensal</h2></div>
         <div class="forecast" id="forecastList"></div>
         <div class="section-heading"><div><span class="overline">OBJETIVOS</span><h2>Metas</h2></div><button class="text-button" data-open="goal">+ Criar meta</button></div>
         <div class="goal-grid" id="goalList"></div>
-        <div class="section-heading"><div><span class="overline">DECISÃO</span><h2>Simulador de compra</h2></div></div>
-        <article class="card simulator"><label>Valor da compra<input id="simValue" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00"></label><label>Parcela mensal<input id="simMonthly" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00"></label><label>Por quantos meses<input id="simMonths" type="number" min="1" value="12"></label><button class="primary-button" id="simulateButton">Analisar compra</button><div class="simulation-result" id="simulationResult" hidden></div></article>
+        <div class="section-heading"><div><span class="overline">🧪 DECISÃO</span><h2>Simulador de compra ou acordo</h2></div></div>
+        <article class="card simulator"><label>Entrada ou gasto agora<input id="simValue" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00"></label><label>Parcela mensal<input id="simMonthly" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00"></label><label>Por quantos meses<input id="simMonths" type="number" min="1" value="12"></label><button class="primary-button" id="simulateButton">Analisar impacto</button><div class="simulation-result" id="simulationResult" hidden></div></article>
+
+        <div class="section-heading"><div><span class="overline">🚨 ANTES DE GASTAR</span><h2>Posso gastar?</h2></div></div>
+        <article class="card spend-check"><label>Quanto pretende gastar?<input id="spendValue" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00"></label><button class="primary-button" id="spendCheckButton">Verificar agora</button><div id="spendCheckResult" hidden></div></article>
+
+        <div class="section-heading"><div><span class="overline">📊 RELATÓRIO DO MÊS</span><h2>Para onde foi o dinheiro?</h2></div></div>
+        <article class="card monthly-report"><div class="report-summary" id="reportSummary"></div><div class="category-report" id="categoryReport"></div></article>
       </section>
 
       <section class="view" data-view="settings">
@@ -103,6 +127,7 @@
           <button data-open="household"><span><strong>Nome da família</strong><small>Personalize o grupo familiar</small></span><b>›</b></button>
           <button data-open="balance"><span><strong>Ajustar saldo</strong><small>Informe quanto você tem hoje</small></span><b>›</b></button>
           <button data-open="income"><span><strong>Fontes de renda</strong><small>Salário, benefício e renda extra</small></span><b>›</b></button>
+          <button data-open="extra"><span><strong>Rendas extraordinárias</strong><small>Meta, 13º, férias e valores pontuais</small></span><b>›</b></button>
           <button data-open="commitment"><span><strong>Contas e parcelas</strong><small>Cadastre recorrências e parcelamentos</small></span><b>›</b></button>
           <button data-open="debt"><span><strong>Dívidas e acordos</strong><small>Acompanhe saldo e estratégia de quitação</small></span><b>›</b></button>
           <button id="exportButton"><span><strong>Exportar backup</strong><small>Compartilhe uma fotografia completa dos dados</small></span><b>↓</b></button>
@@ -112,6 +137,7 @@
         </div>
         <div class="section-heading"><h2>Membros da família</h2><button class="text-button" data-open="member">+ Adicionar</button></div><div class="manager-list" id="memberManager"></div>
         <div class="section-heading"><h2>Fontes de renda</h2></div><div class="manager-list" id="incomeManager"></div>
+        <div class="section-heading"><h2>Rendas extraordinárias</h2><button class="text-button" data-open="extra">+ Adicionar</button></div><div class="manager-list" id="extraManager"></div>
         <div class="section-heading"><h2>Contas e parcelas</h2></div><div class="manager-list" id="commitmentManager"></div>
         <div class="section-heading"><h2>Dívidas e acordos</h2></div><div class="manager-list" id="debtManager"></div>
         <article class="privacy-note"><strong>Privado por padrão</strong><p>Seus dados ficam somente neste dispositivo. O app não envia informações financeiras para servidores.</p><span id="storageStatus">Banco local ativo</span></article>

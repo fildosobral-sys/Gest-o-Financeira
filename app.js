@@ -23,6 +23,7 @@ const activeState = () => stateForMember(state, memberFilter);
 const memberById = id => state.members.find(item => item.id === (id || 'primary')) || state.members[0];
 const memberChoices = () => state.members.filter(item => item.active !== false).map(item => [item.id, item.name]);
 const stamp = item => ({ ...item, updatedAt: new Date().toISOString() });
+const extraTypeLabel = type => ({ bonus: '🏆 Meta/premiação', thirteenth: '🎁 13º salário', vacation: '🏖️ Férias', refund: '↩️ Reembolso', other: '✨ Outra renda' })[type] || '✨ Outra renda';
 
 async function persist(message) {
   state = await saveState(state);
@@ -59,6 +60,11 @@ function renderHome() {
   $('#agendaMonthLabel').textContent = monthName(selectedMonth);
   $('#safeToSpend').textContent = money(safe);
   $('#cashNow').textContent = money(currentCash);
+  $('#committedNow').textContent = money(reserve);
+  $('#monthIncome').textContent = money(totals.realizedIncome);
+  $('#monthExpense').textContent = money(totals.realizedExpense);
+  $('#debtOpen').textContent = money(view.debts.reduce((sum, item) => sum + Number(item.balance || 0), 0));
+  $('#reserveNow').textContent = money(reserve);
   $('#monthResult').textContent = money(totals.result);
   $('#monthResult').className = `money ${totals.result >= 0 ? 'positive' : 'negative'}`;
   $('#pendingIncome').textContent = money(totals.pendingIncome);
@@ -67,8 +73,11 @@ function renderHome() {
   $('#healthScore').textContent = score;
   $('#healthRing').style.setProperty('--score', `${score}%`);
   renderInsight({ safe, score, totals });
+  renderHealthThermometer(score);
+  renderLiveFlow(view, totals, currentCash, reserve, safe, nextIncome);
 
   renderFamilyOverview();
+  renderExtraIncomeOverview(view);
   const entries = agendaEntries(view, selectedMonth)
     .filter(item => entryStatus(view, item, selectedMonth) !== 'paid')
     .slice(0, 4);
@@ -78,6 +87,38 @@ function renderHome() {
   $('#expenseComparison').textContent = `${shortMoney(totals.realizedExpense)} / ${shortMoney(totals.plannedExpense)}`;
   $('#incomeBar').style.width = `${Math.min(100, totals.realizedIncome / Math.max(totals.plannedIncome, 1) * 100)}%`;
   $('#expenseBar').style.width = `${Math.min(100, totals.realizedExpense / Math.max(totals.plannedExpense, 1) * 100)}%`;
+}
+
+function renderExtraIncomeOverview(view) {
+  const extras = view.extras.filter(item => String(item.date || '').startsWith(monthKey(selectedMonth)));
+  $('#extraIncomeOverview').innerHTML = extras.length ? extras.map(item => {
+    const received = view.transactions.some(tx => tx.linkType === 'extra' && tx.linkId === item.id && tx.monthKey === monthKey(selectedMonth));
+    const confidence = { expected: '🟡 Possível', likely: '🟠 Provável', confirmed: '🟢 Confirmada' }[item.confidence] || '🟡 Possível';
+    const period = item.type === 'vacation' && item.vacationStart ? `Férias: ${localDate(item.vacationStart).toLocaleDateString('pt-BR')} a ${localDate(item.vacationEnd || item.vacationStart).toLocaleDateString('pt-BR')}` : `Prevista para ${localDate(item.date).toLocaleDateString('pt-BR')}`;
+    return `<button class="extra-income-card ${item.active === false ? 'inactive' : ''}" data-edit-extra="${escapeHtml(item.id)}"><header><span>${extraTypeLabel(item.type)}</span><small>${received ? '✅ Recebida' : confidence}</small></header><strong>${money(item.value)}</strong><small>${escapeHtml(item.name)}</small><small>${period}</small><div class="extra-warning">${received ? 'Já compõe o saldo bancário.' : item.active === false ? 'Fora da projeção.' : 'Prevista, mas ainda não disponível para gastar.'}</div></button>`;
+  }).join('') : empty('Nenhuma renda extraordinária prevista para este mês.');
+}
+
+function renderHealthThermometer(score) {
+  const level = score < 35 ? 'critical' : score < 60 ? 'attention' : score < 80 ? 'balance' : 'positive';
+  $$('#healthThermometer [data-health]').forEach(item => item.classList.toggle('active', item.dataset.health === level));
+}
+
+function renderLiveFlow(view, totals, currentCash, reserve, safe, nextIncome) {
+  const days = nextIncome ? Math.max(0, Math.ceil((localDate(nextIncome) - localDate(new Date())) / 86400000)) : null;
+  $('#liveFlow').innerHTML = `
+    <article class="flow-value"><span>🏦 Saldo bancário</span><strong>${money(currentCash)}</strong><small>O que existe nas contas</small></article>
+    <article class="flow-value"><span>🔥 Disponível real</span><strong class="${safe >= 0 ? 'positive' : 'negative'}">${money(safe)}</strong><small>Sem usar dinheiro reservado</small></article>
+    <article class="flow-value"><span>🔒 Comprometido</span><strong>${money(reserve)}</strong><small>${nextIncome ? `Próximo recebimento em ${days} dia${days === 1 ? '' : 's'}` : 'Cadastre a próxima renda'}</small></article>`;
+
+  const entries = agendaEntries(view, selectedMonth);
+  const windowCard = (title, subtitle, from, to) => {
+    const period = entries.filter(item => { const day = localDate(item.date).getDate(); return day >= from && day <= to; });
+    const income = period.filter(item => item.isIncome).reduce((sum, item) => sum + item.value, 0);
+    const expense = period.filter(item => !item.isIncome).reduce((sum, item) => sum + item.value, 0);
+    return `<article class="receipt-card"><header><strong>${title}</strong><span>${subtitle}</span></header><dl><dt>Entradas previstas</dt><dd class="positive">${shortMoney(income)}</dd><dt>Contas que vencem</dt><dd class="negative">${shortMoney(expense)}</dd><dt>Valor reservado</dt><dd>${shortMoney(expense)}</dd><dt>Saldo livre previsto</dt><dd class="${income - expense >= 0 ? 'positive' : 'negative'}">${shortMoney(income - expense)}</dd></dl></article>`;
+  };
+  $('#receiptWindows').innerHTML = windowCard('📆 1ª quinzena', 'DIAS 1–15', 1, 15) + windowCard('📆 2ª quinzena', 'DIAS 16–31', 16, 31);
 }
 
 function renderInsight({ safe, score, totals }) {
@@ -165,16 +206,40 @@ function renderPlan() {
   $('#twelveMonthResult').className = `money ${accumulated >= 0 ? 'positive' : 'negative'}`;
   const point = balancePoint(view, selectedMonth);
   $('#balancePoint').textContent = point ? `Ponto de equilíbrio: ${monthName(point)}` : 'Ponto de equilíbrio não previsto em 12 meses';
-  $('#forecastList').innerHTML = months.map(({ date, totals, result }) => `<article class="forecast-card"><span>${monthName(date)}</span><strong class="${result >= 0 ? 'positive' : 'negative'}">${money(result)}</strong><small>${money(totals.plannedIncome)} entra</small><small>${money(totals.plannedExpense)} sai</small></article>`).join('');
+  $('#forecastList').innerHTML = months.map(({ date, totals, result }) => `<article class="forecast-card ${result >= 0 ? 'positive-month' : 'negative-month'}"><span>${monthName(date)}</span><strong class="${result >= 0 ? 'positive' : 'negative'}">${result >= 0 ? '🟢' : '🔴'} ${money(result)}</strong><small>${money(totals.plannedIncome)} entra</small><small>${money(totals.plannedExpense)} sai</small>${totals.pendingIncome > 0 ? '<span class="forecast-badge">🟡 PREVISTO — NÃO DISPONÍVEL</span>' : ''}</article>`).join('');
   $('#goalList').innerHTML = view.goals.length ? view.goals.map(goal => {
     const progress = Math.min(100, Number(goal.current || 0) / Math.max(Number(goal.target || 0), 1) * 100);
     return `<button class="goal-card" data-edit-goal="${escapeHtml(goal.id)}"><span>${escapeHtml(goal.name)}</span><small>${money(goal.current)} de ${money(goal.target)}</small><div class="progress"><i style="width:${progress}%"></i></div></button>`;
   }).join('') : empty('Crie uma meta para transformar sobra em progresso.');
+  renderDebtCenter(view);
+  renderMonthlyReport(view);
+}
+
+function renderDebtCenter(view) {
+  $('#debtCenter').innerHTML = view.debts.length ? view.debts.map(item => {
+    const late = ['Atrasado', 'Renegociar'].includes(item.status);
+    const installments = Number(item.remaining || item.installments || 0);
+    return `<button class="debt-card" data-edit-debt="${escapeHtml(item.id)}"><header><span>${late ? '🔴' : '🟢'} ${escapeHtml(item.status || 'Acompanhar')}</span><small>dia ${Number(item.day) || '—'}</small></header><strong>${escapeHtml(item.name)}</strong><small>Saldo: ${money(item.balance)} · Parcela: ${money(item.monthly)}</small><small>${installments ? `${installments} parcelas restantes` : 'Prazo ainda não informado'}</small><div class="strategy">🎯 ${escapeHtml(item.strategy || item.proposal || 'Defina a estratégia de quitação')}</div></button>`;
+  }).join('') : empty('Cadastre suas dívidas para visualizar saldo, parcela, situação e estratégia.');
+}
+
+function renderMonthlyReport(view) {
+  const totals = totalsForMonth(view, selectedMonth);
+  const transactions = transactionForMonth(view, selectedMonth);
+  const debtPaid = transactions.filter(item => item.linkType === 'debt' || item.cat === 'Dívida').reduce((sum, item) => sum + Number(item.value || 0), 0);
+  const result = totals.realizedIncome - totals.realizedExpense;
+  $('#reportSummary').innerHTML = `<div><span>Você recebeu</span><strong class="positive">${money(totals.realizedIncome)}</strong></div><div><span>Você gastou</span><strong class="negative">${money(totals.realizedExpense)}</strong></div><div><span>Pagou em dívidas</span><strong>${money(debtPaid)}</strong></div><div><span>Reduziu dívidas em</span><strong class="positive">${money(debtPaid)}</strong></div><div><span>Resultado realizado</span><strong class="${result >= 0 ? 'positive' : 'negative'}">${money(result)}</strong></div>`;
+  const expenses = transactions.filter(item => item.type === 'saida');
+  const total = expenses.reduce((sum, item) => sum + Number(item.value || 0), 0);
+  const categories = [...expenses.reduce((map, item) => map.set(item.cat || 'Outros', (map.get(item.cat || 'Outros') || 0) + Number(item.value || 0)), new Map())]
+    .sort((a, b) => b[1] - a[1]);
+  $('#categoryReport').innerHTML = categories.length ? categories.map(([category, value]) => { const percent = value / Math.max(total, 1) * 100; return `<div class="category-row"><span>${categoryIcon(category)} ${escapeHtml(category)}</span><div class="bar"><i class="expense" style="width:${percent}%"></i></div><b>${Math.round(percent)}%</b></div>`; }).join('') : empty('Registre saídas para formar o gráfico mensal por categoria.');
 }
 
 function renderSettings() {
   $('#memberManager').innerHTML = state.members.map(item => `<button class="manager-item" data-edit-member="${escapeHtml(item.id)}"><span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.role || 'Membro')} · ${item.active === false ? 'inativo' : 'ativo'}</small></span><b>›</b></button>`).join('');
-  $('#incomeManager').innerHTML = state.incomes.length ? state.incomes.map(item => `<button class="manager-item" data-edit-income="${escapeHtml(item.id)}"><span><strong>${escapeHtml(item.name)}</strong><small>${item.schedule === 'second-business-day' ? '2º dia útil' : `Dia ${item.day}`} · ${item.active === false ? 'pausada' : 'ativa'}</small></span><b class="positive">${money(item.value)}</b></button>`).join('') : empty('Nenhuma renda cadastrada.');
+  $('#incomeManager').innerHTML = state.incomes.length ? state.incomes.map(item => `<button class="manager-item" data-edit-income="${escapeHtml(item.id)}"><span><strong>${item.availability === 'regular' ? '🟢' : '🟡'} ${escapeHtml(item.name)}</strong><small>${item.schedule === 'second-business-day' ? '2º dia útil' : `Dia ${item.day}`} · ${item.active === false ? 'fora da projeção' : item.availability === 'regular' ? 'renda regular' : 'prevista'}</small></span><b class="positive">${money(item.value)}</b></button>`).join('') : empty('Nenhuma renda cadastrada.');
+  $('#extraManager').innerHTML = state.extras.length ? state.extras.sort((a, b) => String(a.date).localeCompare(String(b.date))).map(item => `<button class="manager-item" data-edit-extra="${escapeHtml(item.id)}"><span><strong>${extraTypeLabel(item.type)} · ${escapeHtml(item.name)}</strong><small>${item.date ? localDate(item.date).toLocaleDateString('pt-BR') : 'Sem data'} · ${item.active === false ? 'fora da projeção' : item.confidence === 'confirmed' ? 'confirmada' : item.confidence === 'likely' ? 'provável' : 'possível'}</small></span><b class="positive">${money(item.value)}</b></button>`).join('') : empty('Nenhuma renda extraordinária cadastrada.');
   $('#commitmentManager').innerHTML = state.commitments.length ? state.commitments.map(item => `<button class="manager-item" data-edit-commitment="${escapeHtml(item.id)}"><span><strong>${escapeHtml(item.name)}</strong><small>${item.recurring ? 'Recorrente' : `${item.installments} parcelas`} · dia ${item.day}</small></span><b class="negative">${money(item.value)}</b></button>`).join('') : empty('Nenhuma conta cadastrada.');
   $('#debtManager').innerHTML = state.debts.length ? state.debts.map(item => `<button class="manager-item" data-edit-debt="${escapeHtml(item.id)}"><span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.status || 'Acompanhar')} · ${escapeHtml(item.strategy || 'Sem estratégia')}</small></span><b>${money(item.balance)}</b></button>`).join('') : empty('Nenhuma dívida cadastrada.');
 }
@@ -229,7 +294,21 @@ function openEditor(type, existing = null, prefill = {}) {
     fields = field('Nome', 'name', 'text', existing?.name || '', { class: 'full', required: true, maxlength: 100 }) +
       field('Valor previsto', 'value', 'number', existing?.value || '', { min: 0.01, step: 0.01, required: true }) +
       select('Quando recebe', 'schedule', existing?.schedule || 'fixed', [['fixed', 'Dia fixo'], ['second-business-day', '2º dia útil']]) +
-      field('Dia do mês', 'day', 'number', existing?.day || 5, { min: 1, max: 31 });
+      field('Dia do mês', 'day', 'number', existing?.day || 5, { min: 1, max: 31 }) +
+      select('Confiança', 'availability', existing?.availability || 'expected', [['expected', '🟡 Prevista — ainda não disponível'], ['regular', '🟢 Renda regular']]) +
+      select('Incluir na projeção', 'active', String(existing?.active ?? true), [['true', 'Sim'], ['false', 'Não, deixar pausada']]);
+  } else if (type === 'extra') {
+    title = existing ? 'Editar renda extraordinária' : 'Nova renda extraordinária'; eyebrow = 'VALOR FORA DA ROTINA';
+    const replaceChoices = [['', 'Não substitui nenhuma renda'], ...state.incomes.map(item => [item.id, item.name])];
+    fields = field('Nome', 'name', 'text', existing?.name || '', { class: 'full', required: true, maxlength: 100 }) +
+      select('Tipo', 'extraType', existing?.type || 'bonus', [['bonus', '🏆 Meta/premiação'], ['thirteenth', '🎁 13º salário'], ['vacation', '🏖️ Férias'], ['refund', '↩️ Reembolso'], ['other', '✨ Outra renda']]) +
+      field('Valor previsto', 'value', 'number', existing?.value || '', { min: 0.01, step: 0.01, required: true }) +
+      field('Data prevista para receber', 'date', 'date', existing?.date || new Date().toISOString().slice(0, 10), { required: true }) +
+      select('Nível de certeza', 'confidence', existing?.confidence || 'expected', [['expected', '🟡 Possível'], ['likely', '🟠 Provável'], ['confirmed', '🟢 Confirmada']]) +
+      select('Incluir na projeção', 'active', String(existing?.active ?? true), [['true', 'Sim'], ['false', 'Não, deixar pausada']]) +
+      field('Início das férias (opcional)', 'vacationStart', 'date', existing?.vacationStart || '') +
+      field('Fim das férias (opcional)', 'vacationEnd', 'date', existing?.vacationEnd || '') +
+      select('Durante as férias, este valor substitui', 'replaceIncomeId', existing?.replaceIncomeId || '', replaceChoices, true);
   } else if (type === 'goal') {
     title = existing ? 'Atualizar meta' : 'Nova meta'; eyebrow = 'OBJETIVO';
     fields = field('Nome', 'name', 'text', existing?.name || '', { class: 'full', required: true, maxlength: 100 }) + field('Valor alvo', 'target', 'number', existing?.target || '', { min: 0.01, step: 0.01, required: true }) + field('Já acumulado', 'current', 'number', existing?.current || 0, { min: 0, step: 0.01 });
@@ -242,8 +321,12 @@ function openEditor(type, existing = null, prefill = {}) {
       field('Saldo devedor', 'balance', 'number', existing?.balance || '', { min: 0, step: 0.01, required: true }) +
       select('Status', 'status', existing?.status || 'Atrasado', [['Atrasado', 'Atrasado'], ['Em dia', 'Em dia'], ['Renegociar', 'Renegociar'], ['Aguardar', 'Aguardar']]) +
       field('Parcela do acordo', 'monthly', 'number', existing?.monthly || 0, { min: 0, step: 0.01 }) +
+      field('Primeiro vencimento', 'start', 'date', existing?.start || new Date().toISOString().slice(0, 10)) +
       field('Dia da parcela', 'day', 'number', existing?.day || 1, { min: 1, max: 31 }) +
-      field('Estratégia', 'strategy', 'text', existing?.strategy || '', { class: 'full', maxlength: 160 });
+      field('Parcelas restantes', 'remaining', 'number', existing?.remaining || '', { min: 0, max: 999 }) +
+      field('Entrada da proposta', 'proposalEntry', 'number', existing?.proposalEntry || 0, { min: 0, step: 0.01 }) +
+      field('Estratégia', 'strategy', 'text', existing?.strategy || '', { class: 'full', maxlength: 160 }) +
+      field('Proposta/observação', 'proposal', 'text', existing?.proposal || '', { class: 'full', maxlength: 180 });
   } else if (type === 'member') {
     title = existing ? 'Editar membro' : 'Novo membro da família'; eyebrow = 'FAMÍLIA';
     fields = field('Nome', 'name', 'text', existing?.name || '', { class: 'full', required: true, maxlength: 60 }) +
@@ -254,7 +337,7 @@ function openEditor(type, existing = null, prefill = {}) {
     title = 'Nome da família'; eyebrow = 'GRUPO FAMILIAR';
     fields = field('Nome do grupo', 'name', 'text', state.household.name || 'Minha família', { class: 'full', required: true, maxlength: 60 });
   }
-  if (['transaction', 'commitment', 'income', 'goal', 'debt'].includes(type)) fields += select('Pertence a', 'memberId', existing?.memberId || prefill.memberId || (memberFilter === 'all' ? 'primary' : memberFilter), memberChoices(), true);
+  if (['transaction', 'commitment', 'income', 'extra', 'goal', 'debt'].includes(type)) fields += select('Pertence a', 'memberId', existing?.memberId || prefill.memberId || (memberFilter === 'all' ? 'primary' : memberFilter), memberChoices(), true);
   $('#dialogTitle').textContent = title; $('#dialogEyebrow').textContent = eyebrow; $('#dialogFields').innerHTML = fields;
   $('#editorDialog').showModal();
 }
@@ -272,8 +355,12 @@ async function saveEditor(formData) {
     state.commitments = id ? state.commitments.map(entry => entry.id === id ? item : entry) : [...state.commitments, item];
   } else if (type === 'income') {
     const previous = state.incomes.find(item => item.id === id);
-    const item = stamp({ ...previous, id: id || uid(), name: data.name.trim(), value: Number(data.value), schedule: data.schedule, day: Number(data.day), memberId: data.memberId, active: true });
+    const item = stamp({ ...previous, id: id || uid(), name: data.name.trim(), value: Number(data.value), schedule: data.schedule, day: Number(data.day), availability: data.availability, memberId: data.memberId, active: data.active === 'true' });
     state.incomes = id ? state.incomes.map(entry => entry.id === id ? item : entry) : [...state.incomes, item];
+  } else if (type === 'extra') {
+    const previous = state.extras.find(item => item.id === id);
+    const item = stamp({ ...previous, id: id || uid(), name: data.name.trim(), type: data.extraType, value: Number(data.value), date: data.date, confidence: data.confidence, active: data.active === 'true', vacationStart: data.vacationStart || '', vacationEnd: data.vacationEnd || '', replaceIncomeId: data.extraType === 'vacation' ? data.replaceIncomeId : '', memberId: data.memberId });
+    state.extras = id ? state.extras.map(entry => entry.id === id ? item : entry) : [...state.extras, item];
   } else if (type === 'goal') {
     const previous = state.goals.find(item => item.id === id);
     const item = stamp({ ...previous, id: id || uid(), name: data.name.trim(), target: Number(data.target), current: Number(data.current), memberId: data.memberId });
@@ -283,7 +370,7 @@ async function saveEditor(formData) {
     state.initialBalance = Number(data.balance) - transactionSum;
   } else if (type === 'debt') {
     const previous = state.debts.find(item => item.id === id);
-    const item = stamp({ ...previous, id: id || uid(), name: data.name.trim(), balance: Number(data.balance), status: data.status, monthly: Number(data.monthly), day: Number(data.day), strategy: data.strategy.trim(), memberId: data.memberId });
+    const item = stamp({ ...previous, id: id || uid(), name: data.name.trim(), balance: Number(data.balance), status: data.status, monthly: Number(data.monthly), start: data.start, day: Number(data.day), remaining: Number(data.remaining) || 0, proposalEntry: Number(data.proposalEntry) || 0, strategy: data.strategy.trim(), proposal: data.proposal.trim(), memberId: data.memberId });
     state.debts = id ? state.debts.map(entry => entry.id === id ? item : entry) : [...state.debts, item];
   } else if (type === 'member') {
     const previous = state.members.find(item => item.id === id);
@@ -300,7 +387,8 @@ async function saveEditor(formData) {
 async function recordEntry(kind, id) {
   const entry = agendaEntries(state, selectedMonth).find(item => item.kind === kind && item.id === id);
   if (!entry) return;
-  state.transactions.push(stamp({ id: uid(), type: entry.isIncome ? 'entrada' : 'saida', date: entry.date, desc: entry.name, cat: entry.isIncome ? 'Salário' : entry.kind === 'debt' ? 'Dívida' : 'Outros', value: entry.value, memberId: entry.memberId || 'primary', linkType: entry.kind, linkId: entry.id, monthKey: monthKey(selectedMonth) }));
+  state.transactions.push(stamp({ id: uid(), type: entry.isIncome ? 'entrada' : 'saida', date: entry.date, desc: entry.name, cat: entry.kind === 'extra' ? 'Extra' : entry.isIncome ? 'Salário' : entry.kind === 'debt' ? 'Dívida' : 'Outros', value: entry.value, memberId: entry.memberId || 'primary', linkType: entry.kind, linkId: entry.id, monthKey: monthKey(selectedMonth) }));
+  if (kind === 'debt') state.debts = state.debts.map(item => item.id === id ? stamp({ ...item, balance: Math.max(0, Number(item.balance || 0) - entry.value), remaining: Number(item.remaining || 0) > 0 ? Number(item.remaining) - 1 : 0, status: Number(item.balance || 0) - entry.value <= 0 ? 'Em dia' : item.status }) : item);
   await persist(entry.isIncome ? 'Recebimento registrado.' : 'Pagamento registrado.');
 }
 
@@ -310,13 +398,26 @@ function simulate() {
   const months = Number($('#simMonths').value) || 1;
   const view = activeState();
   const totals = totalsForMonth(view, selectedMonth);
-  const margin = totals.plannedIncome - totals.plannedExpense - monthly;
+  const before = totals.plannedIncome - totals.plannedExpense;
+  const margin = before - monthly;
   const safe = cashNow(view) - reservedUntilNextIncome(view) - value;
-  let verdict = 'Compatível com seu fluxo'; let detail = `Após a parcela, sobrariam ${money(margin)} por mês.`; let tone = 'positive';
-  if (margin < 0 || safe < 0) { verdict = 'Não recomendado agora'; detail = `A compra criaria um déficit de ${money(Math.abs(Math.min(margin, safe)))}.`; tone = 'negative'; }
+  let verdict = '✅ ACORDO COMPATÍVEL'; let detail = `Sua margem passaria de ${money(before)} para ${money(margin)} por mês.`; let tone = 'positive';
+  if (margin < 0 || safe < 0) { verdict = '⚠️ ACORDO NÃO RECOMENDADO'; detail = `Sua margem passaria de ${money(before)} para ${money(margin)} e faltariam ${money(Math.abs(Math.min(margin, safe)))}.`; tone = 'negative'; }
   else if (margin < totals.plannedIncome * .1) { verdict = 'Cabe, mas com pouca margem'; detail = `A folga mensal cairia para ${money(margin)} durante ${months} meses.`; tone = ''; }
   $('#simulationResult').hidden = false;
   $('#simulationResult').innerHTML = `<strong class="${tone}">${verdict}</strong><p>${detail} O custo informado foi ${money(value)}.</p>`;
+}
+
+function checkSpending() {
+  const value = Number($('#spendValue').value) || 0;
+  const view = activeState();
+  const bank = cashNow(view);
+  const committed = reservedUntilNextIncome(view);
+  const available = bank - committed;
+  const after = available - value;
+  const compatible = value > 0 && after >= 0;
+  $('#spendCheckResult').hidden = false;
+  $('#spendCheckResult').innerHTML = `<strong class="${compatible ? 'positive' : 'negative'}">${compatible ? '🟢 COMPATÍVEL' : '🔴 NÃO RECOMENDADO'}</strong><p>Você possui ${money(bank)} nas contas, porém ${money(committed)} já estão comprometidos. Disponível real: ${money(available)}. Após o gasto: ${money(after)}.</p>`;
 }
 
 function downloadBackup(label = '') {
@@ -364,6 +465,7 @@ document.addEventListener('click', async event => {
   const editTx = event.target.closest('[data-edit-transaction]'); if (editTx) openEditor('transaction', state.transactions.find(item => item.id === editTx.dataset.editTransaction));
   const editGoal = event.target.closest('[data-edit-goal]'); if (editGoal) openEditor('goal', state.goals.find(item => item.id === editGoal.dataset.editGoal));
   const editIncome = event.target.closest('[data-edit-income]'); if (editIncome) openEditor('income', state.incomes.find(item => item.id === editIncome.dataset.editIncome));
+  const editExtra = event.target.closest('[data-edit-extra]'); if (editExtra) openEditor('extra', state.extras.find(item => item.id === editExtra.dataset.editExtra));
   const editCommitment = event.target.closest('[data-edit-commitment]'); if (editCommitment) openEditor('commitment', state.commitments.find(item => item.id === editCommitment.dataset.editCommitment));
   const editDebt = event.target.closest('[data-edit-debt]'); if (editDebt) openEditor('debt', state.debts.find(item => item.id === editDebt.dataset.editDebt));
   const editMember = event.target.closest('[data-edit-member]'); if (editMember) openEditor('member', state.members.find(item => item.id === editMember.dataset.editMember));
@@ -382,6 +484,7 @@ $('#searchTransactions').addEventListener('input', renderTransactions);
 $('#transactionFilter').addEventListener('change', renderTransactions);
 $('#memberFilter').addEventListener('change', event => { memberFilter = event.target.value; renderAll(); });
 $('#simulateButton').addEventListener('click', simulate);
+$('#spendCheckButton').addEventListener('click', checkSpending);
 $('#shareImageButton').addEventListener('click', exportSummaryImage);
 $('#themeToggle').addEventListener('click', async () => { state.preferences.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; await persist(); });
 $('#privacyToggle').addEventListener('click', async () => { state.preferences.privacy = !state.preferences.privacy; await persist(); });
