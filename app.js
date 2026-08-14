@@ -494,7 +494,7 @@ $('#importFile').addEventListener('change', async event => { try { const file = 
 $('#resetButton').addEventListener('click', async () => { if (!confirm('Apagar todos os dados financeiros deste dispositivo? Esta ação não pode ser desfeita.')) return; if (!confirm('Confirma que deseja recomeçar com o app vazio?')) return; state = await clearState(); renderAll(); toast('Dados apagados.'); });
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-  navigator.serviceWorker.register('./sw.js').then(registration => {
+  navigator.serviceWorker.register('./sw-financeiro.js', { scope: './', updateViaCache: 'none' }).then(registration => {
     let pendingUpdateWorker = registration.waiting;
     const showUpdate = worker => {
       pendingUpdateWorker = worker || registration.waiting;
