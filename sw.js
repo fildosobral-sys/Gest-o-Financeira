@@ -1,7 +1,7 @@
 // Compatibilidade: páginas antigas ainda podem solicitar sw.js.
 // A versão atual registra sw-financeiro.js no mesmo escopo e substitui esta.
 const FINANCE_CACHE_PREFIX = 'meu-financeiro-familiar-';
-const CACHE = `${FINANCE_CACHE_PREFIX}v532-nova-identidade-visual`;
+const CACHE = `${FINANCE_CACHE_PREFIX}v533-icone-legivel`;
 const APP_SCOPE_PATH = '/Gest-o-Financeira/';
 const ASSETS = ['./', './index.html', './styles.css', './managers.css', './ui-fixes.css', './family.css', './decision.css', './manifest.json', './manifest-financeiro.webmanifest', './app.js', './domain.js', './storage.js', './icone-financeiro-180.png', './icone-financeiro-192.png', './icone-financeiro-512.png'];
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting())));
