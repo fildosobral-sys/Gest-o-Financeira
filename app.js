@@ -304,7 +304,7 @@ function go(view) {
   $$('.bottom-nav button').forEach(item => item.classList.toggle('active', item.dataset.nav === view));
   const titles = { home: 'Visão geral', moves: 'Movimentações', agenda: 'Agenda', plan: 'Planejamento', settings: 'Configurações' };
   $('#pageTitle').textContent = titles[view];
-  $('.fab').hidden = view === 'settings';
+  $('.fab').hidden = view === 'settings' || view === 'agenda';
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
